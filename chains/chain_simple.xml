@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<depletion>
+  <!-- decay constants -->
+  <decay_constants>
+    <nuclide_table name="I-135" decay_modes="   1" reactions=" 1" half_life=" 2.36520E+04"  >
+    <decay_type  type="beta"   target="Xe-135" branching_ratio=" 1.00000E+00" />
+    <reaction_type  type="(n,gamma)"   target="Xe-136" /> <!-- Not precisely true, but whatever -->
+  </nuclide_table>
+  <nuclide_table name="Xe-135" decay_modes="   1" reactions=" 1" half_life=" 3.29040E+04"  >
+    <decay_type  type=" beta"   target="Cs-135" branching_ratio=" 1.00000E+00" />
+    <reaction_type  type="(n,gamma)"   target="Xe-136" />
+  </nuclide_table>
+  <nuclide_table name="Xe-136" decay_modes="   0" reactions=" 0" />
+  <nuclide_table name="Cs-135" decay_modes="   0" reactions=" 0" />
+  <nuclide_table name="Gd-157" decay_modes="   0" reactions=" 1"  >
+    <reaction_type  type="(n,gamma)"   target="Nothing" />
+  </nuclide_table>
+  <nuclide_table name="Gd-156" decay_modes="   0" reactions=" 1"  >
+    <reaction_type  type="(n,gamma)"   target="Gd-157" />
+  </nuclide_table>
+  <nuclide_table name="U-234" decay_modes="   0" reactions=" 1">
+    <reaction_type  type="fission" energy="191.84"/>
+  </nuclide_table>
+  <nuclide_table name="U-235" decay_modes="   0" reactions=" 1">
+    <reaction_type  type="fission" energy="193.41"/>
+  </nuclide_table>
+  <nuclide_table name="U-238" decay_modes="  0" reactions=" 1">
+    <reaction_type  type="fission" energy="197.79"/>
+  </nuclide_table>
+ </decay_constants>
+ <!-- neutron-induced fission yields -->
+ <neutron_fission_yields>
+  <nuclides> 6</nuclides>
+  <precursor>  3</precursor>
+  <energy_points>   1</energy_points>
+  <precursor_name>
+      U-234 U-235  U-238
+  </precursor_name>
+  <energy>
+      2.53000E-02
+  </energy>
+  <nuclide_table name="Gd-157" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+          1.093250e-04 6.142710e-5  4.141120e-04
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+  <nuclide_table name="Gd-156" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+           2.087260e-04  1.483250e-04     7.605360e-04
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+  <nuclide_table name="I-135" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+          2.780820e-02 0.0292737  0.0135457
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+  <nuclide_table name="Xe-135" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+          6.759540e-03 0.002566345 0.00026864
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+  <nuclide_table name="Xe-136" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+          2.392300e-02 0.0219242  0.0024432
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+  <nuclide_table name="Cs-135" >
+    <fission_yields energy =" 2.53000E-02" >
+      <fy_data>
+          4.356330e-05 4.9097e-6  3.7100E-07
+      </fy_data>
+    </fission_yields>
+  </nuclide_table>
+ </neutron_fission_yields>
+</depletion>
