@@ -13,6 +13,7 @@ Example:
 import depletion_chain
 import reaction_rates
 import openmc
+import openmc_wrapper
 from collections import OrderedDict
 
 
@@ -23,22 +24,41 @@ class Operator:
         self.settings = None
         """openmc_wrapper.Settings: Settings file"""
 
+    @property
+    def chain(self):
+        return self.geometry.chain
+
+    @property
+    def reaction_rates(self):
+        return self.geometry.reaction_rates
+
+    @property
+    def total_number(self):
+        return self.geometry.total_number
+
     def initialize(self, geo, vol, mat, settings):
+        self.geometry = openmc_wrapper.Geometry()
         # First, load in depletion data
         self.load_depletion_data(settings.chain_file)
-
         # Then, create geometry
-        self.geometry = openmc_wrapper.Geometry()
         self.geometry.geometry = geo
         self.geometry.materials = mat
         self.geometry.volume = vol
-        self.geometry.initialize(settings)
+        initial_vec = self.geometry.initialize(settings)
 
         # Save settings
         self.settings = settings
 
+        return initial_vec
+
+    def start(self):
+        return self.geometry.start()
+
+    def set_density(self, vec):
+        self.geometry.set_density(vec)
+
     def eval(self, vec):
-        return geometry.function_evaluation(vec, self.settings)
+        return self.geometry.function_evaluation(vec, self.settings)
 
     def load_depletion_data(self, filename):
         """ Load self.depletion_data

@@ -36,7 +36,7 @@ def extract_rates(geo):
     # Extract results
     for cell in geo.burn_list:
         rates[cell] = {}
-        for nuclide in geo.depletion_chain.nuclides:
+        for nuclide in geo.chain.nuclides:
             name = nuclide.name
             rates[cell][name] = {}
             for i in range(nuclide.n_reaction_paths):

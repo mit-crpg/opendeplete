@@ -17,19 +17,19 @@ t_ref = np.array([0, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25
 # Note, CASMO will be more accurate due to the decay chain and the power/time conversion.
 
 # Load geometry
-input = open(folder + 'geometry_MCNP.pkl', 'rb')
-geo = pickle.load(input)
-input.close()
+#~ input = open(folder + 'geometry_MCNP.pkl', 'rb')
+#~ geo = pickle.load(input)
+#~ input.close()
 
 result_folder = folder + "test"
 cells = [10000, 10001, 10002, 10003, 10004]
 nuclides = ['Xe-135', 'U-235', 'Gd-157']
 
 # Load data
-x,y = utilities.get_atoms_volaveraged(result_folder, geo, cells, nuclides)
+x,y = utilities.get_atoms(result_folder, cells, nuclides)
 
 
-plt.semilogy(x,y['Gd-157'])
+plt.semilogy(x,y[10002]['Gd-157'])
 plt.semilogy(t_ref, gd_ref)
 plt.legend(('MCNP', 'Ref'), loc='best')
 plt.show()

@@ -17,7 +17,7 @@ import math
 import concurrent.futures
 
 
-def predictor(geo, settings):
+def predictor(geo, vec):
     """ Runs a depletion problem using the predictor algorithm.
 
     This algorithm uses the beginning-of-timestep reaction rates for the whole
@@ -32,20 +32,20 @@ def predictor(geo, settings):
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(settings.output_dir, exist_ok=True)
+    os.makedirs(geo.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(settings.output_dir)
+    os.chdir(geo.settings.output_dir)
 
     # Generate initial conditions
-    vec = initialize(geo, settings)
+    vec = geo.start()
 
     time = 0.0
     ind = 0
 
-    for dt in settings.dt_vec:
+    for dt in geo.settings.dt_vec:
         # Evaluate function at vec to get mat
-        mat, eigvl, r1, seed = function_evaluation(geo, vec, settings)
+        mat, eigvl, r1, seed = geo.eval(vec)
         write_results(geo, eigvl, [vec], [r1], [1], [seed], time, ind)
 
         # Update vec with the integrator.
@@ -54,7 +54,7 @@ def predictor(geo, settings):
         ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, seed = function_evaluation(geo, vec, settings)
+    mat, eigvl, r1, seed = geo.eval(vec)
     write_results(geo, eigvl, [vec], [r1], [1], [seed], time, ind)
 
     # Return to origin
