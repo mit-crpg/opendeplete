@@ -1,4 +1,4 @@
-"""DepletionChain module.
+"""depletion_chain module.
 
 This module contains information about a depletion chain.  A depletion chain is
 loaded from an .xml file and all the nuclides are linked together.
@@ -8,32 +8,50 @@ from collections import OrderedDict
 
 
 class DepletionChain:
+    """ The DepletionChain class.
+
+    This class contains a full representation of a depletion chain.
+
+    Attributes
+    ----------
+    n_nuclides : int
+        Number of nuclides in chain.
+    n_fp_nuclides : int
+        Number of fission product nuclides in chain.
+    nuclides : List[nuclide.Nuclide]
+        List of nuclides in chain.
+    nuclide_dict : OrderedDict[int]
+        Maps a nuclide name to an index in nuclides.
+    precursor_dict : OrderedDict[int]
+        Maps a nuclide name to an index in yields.fis_yield_data
+    yields : nuclide.Yield
+        Yield object for fission.
+    reaction_list : List[str]
+        List of all possible reactions in chain.
+    """
+
     def __init__(self):
         self.n_nuclides = None
-        """int: Number of nuclides in chain."""
         self.n_fp_nuclides = None
-        """int: Number of fission product nuclides in chain."""
         self.nuclides = None
-        """list: List of Nuclide objects."""
 
         self.nuclide_dict = None
-        """OrderedDict: Name to index in self.nuclides dictionary."""
         self.precursor_dict = None
-        """OrderedDict: Name to index in precursor list."""
 
         self.yields = None
-        """Yield: Yield object for fission."""
 
         self.reaction_list = None
-        """list: List of reaction types."""
 
     def xml_read(self, filename):
         """ Reads a depletion chain xml file.
 
-        Args:
-            filename (str): The path to the depletion chain xml file.
+        Parameters
+        ----------
+        filename : str
+            The path to the depletion chain xml file.
 
-        Todo:
+        Todo
+        ----
             Allow for branching on capture, etc.
         """
         import xml.etree.ElementTree as ET
@@ -83,7 +101,8 @@ class DepletionChain:
                 for decay_node in nuclide_node.iter('decay_type'):
                     nuc.decay_target.append(decay_node.get('target'))
                     nuc.decay_type.append(decay_node.get('type'))
-                    nuc.branching_ratio.append(float(decay_node.get('branching_ratio')))
+                    nuc.branching_ratio.append(
+                        float(decay_node.get('branching_ratio')))
 
             # Check for reaction paths
             if nuc.n_reaction_paths > 0:
@@ -147,7 +166,9 @@ class DepletionChain:
         # Allocate variables
         self.yields.name = []
 
-        self.yields.fis_yield_data = np.zeros([self.yields.n_fis_prod, self.yields.n_energies, self.yields.n_precursors])
+        self.yields.fis_yield_data = np.zeros([self.yields.n_fis_prod,
+                                               self.yields.n_energies,
+                                               self.yields.n_precursors])
 
         self.yields.fis_prod_dict = OrderedDict()
 
@@ -170,16 +191,25 @@ class DepletionChain:
 
                 self.yields.fis_prod_dict[name] = product_index
                 temp = fy_table.find('fy_data').text
-                self.yields.fis_yield_data[product_index, energy_index, :] = [float(x) for x in temp.split()]
+                self.yields.fis_yield_data[product_index, energy_index, :] = \
+                    [float(x) for x in temp.split()]
 
             product_index += 1
 
     def form_matrix(self, rates):
         """ Forms depletion matrix.
 
-        Args:
-            rates (dict): Dictionary of dictionary of reaction rates by nuclide.
+        Parameters
+        ----------
+        rates : reaction_rates.ReactionRates
+            Reaction rates to form matrix from.
+
+        Returns
+        -------
+        matrix : scipy.sparse.csr_matrix
+            Sparse matrix representing depletion.
         """
+
         import scipy.sparse as sp
         import math
 
@@ -203,7 +233,8 @@ class DepletionChain:
                     if target_nuclide != 'Nothing':
                         k = self.nuclide_dict[target_nuclide]
 
-                        matrix[k, i] += nuclide.branching_ratio[j] * decay_constant
+                        matrix[k, i] += \
+                            nuclide.branching_ratio[j] * decay_constant
 
             for j in range(nuclide.n_reaction_paths):
                 # Reaction paths
@@ -229,18 +260,24 @@ class DepletionChain:
                         for k in range(self.yields.n_fis_prod):
                             l = self.nuclide_dict[self.yields.name[k]]
                             # Todo energy
-                            matrix[l, i] += self.yields.fis_yield_data[k, 0, m] * n_rates[j]
+                            matrix[l, i] += \
+                                self.yields.fis_yield_data[k, 0, m] * \
+                                n_rates[j]
         matrix = matrix.tocsr()
         return matrix
 
     def nuc_by_ind(self, ind):
         """ Extracts nuclides from the list by dictionary key.
 
-        Args:
-            ind (str): Name of nuclide.
+        Parameters
+        ----------
+        ind : str
+            Name of nuclide.
 
-        Returns:
-            (Nuclide) Nuclide object with the name of ind.
+        Returns
+        -------
+        nuclide.Nuclide
+            Nuclide object that corresponds to ind.
         """
         return self.nuclides[self.nuclide_dict[ind]]
 
@@ -251,11 +288,15 @@ def matrix_wrapper(input_tuple):
     This wrapper is used whenever a pmap/map-type function is used to make
     matrices for each cell in parallel.
 
-    Args:
-        input_tuple (tuple): Index 0 is the chain, index 1 is the reaction
-                             rate array.
+    Parameters
+    ----------
+    input_tuple : Tuple
+        Index 0 is the chain (depletion_chain.DepletionChain), index 1 is the
+        reaction rate array (reaction_rates.ReactionRates).
 
-    Returns:
-        (scipy.sparse.linalg.csr_matrix) The matrix for this reaction rate.
+    Returns
+    -------
+    scipy.sparse.csr_matrix
+        The matrix for this reaction rate.
     """
     return input_tuple[0].form_matrix(input_tuple[1])

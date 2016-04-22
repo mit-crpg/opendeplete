@@ -7,7 +7,23 @@ import numpy as np
 
 
 class ReactionRates:
+    """ The Nuclide class.
+
+    Contains everything in a depletion chain relating to a single nuclide.
+
+    Parameters
+    ----------
+    chain : depletion_chain.DepletionChain
+        The depletion chain to construct a reaction rate table from.
+
+    Attributes
+    ----------
+    rate : Dict[numpy.array]
+        Dictionary of reaction rate vectors, indexed by nuclide name.
+    """
+
     def __init__(self, chain):
+
         self.rate = {}
         """dict: Dictionary of fission products to indexes."""
 

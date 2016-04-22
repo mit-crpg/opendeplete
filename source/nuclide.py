@@ -5,60 +5,92 @@ Contains the per-nuclide components of a depletion chain.
 
 
 class Nuclide:
+    """ The Nuclide class.
+
+    Contains everything in a depletion chain relating to a single nuclide.
+
+    Attributes
+    ----------
+    name : str
+        Name of nuclide.
+    half_life : float
+        Half life of nuclide.
+    n_decay_paths : int
+        Number of decay pathways.
+    decay_target : List[str]
+        Names of targets nuclide can decay to.
+    branching_ratio : List[float]
+        Branching ratio for each target.
+    n_reaction_paths : int
+        Number of possible reaction pathways.
+    reaction_target : List[str]
+        List of names of targets of reactions.
+    reaction_type : List[str]
+        List of names of reactions.
+    yield_ind : int
+        Index in nuclide.Yield table.
+    fission_power : float
+        Energy released in a fission, MeV.
+    """
 
     def __init__(self):
         # Information about the nuclide
         self.name = None
-        """str: Name of nuclide."""
         self.half_life = None
-        """float: Half life of nuclide."""
 
         # Decay paths
         self.n_decay_paths = None
-        """int: Number of possible decay pathways."""
         self.decay_target = None
-        """list: List of names of nuclides it decays to."""
         self.decay_type = None
-        """list: The name of the decay method."""
         self.branching_ratio = None
-        """list: Branching ratio for each decay path."""
 
         # Reaction paths and rates
         self.n_reaction_paths = None
-        """int: Number of possible reaction pathways."""
         self.reaction_target = None
-        """list: List of names of targets of reactions."""
         self.reaction_type = None
-        """list: The name of the reaction pathway."""
 
         self.yield_ind = None
-        """int: Index in yield tables."""
 
         self.fission_power = None
-        """float: Fission energy release, MeV."""
 
 
 class Yield:
+    """ The Yield class.
+
+    Contains a complete description of fission for a decay chain.
+
+    Attributes
+    ----------
+    n_fis_prod : int
+        Number of fission products.
+    n_precursors : int
+        Number of precursor nuclides.
+    n_energies
+        Number of energies.
+    name : List[str]
+        Name of fission products.
+    precursor_list : List[str]
+        Name of precursors.
+    energy_list : List[float]
+        Energy list.
+    fis_prod_dict : Dict[int]
+        Maps fission product name to index in fis_yield_data.
+    energy_dict : Dict[int]
+        Maps an energy to an index in fis_yield_data.
+    fis_yield_data : np.array
+        Fission yield data, indexed as [product ind, energy ind, nuclide ind].
+    """
 
     def __init__(self):
         self.n_fis_prod = None
-        """int: Number of fission products."""
         self.n_precursors = None
-        """int: Number of precursor nuclides."""
         self.n_energies = None
-        """int: Number of energies."""
 
         self.name = None
-        """list: Names of products."""
         self.precursor_list = None
-        """list: Names of precursors."""
         self.energy_list = None
-        """list: Energy list."""
 
         self.fis_prod_dict = None
-        """dict: Dictionary of fission products to indexes."""
         self.energy_dict = None
-        """dict: Dictionary of energies to indexes."""
 
         self.fis_yield_data = None
-        """np.array: Fission yield data."""

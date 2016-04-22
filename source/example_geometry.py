@@ -1,8 +1,16 @@
+"""An example file showing how to make a geometry.
+
+This particular example creates a 2x2 geometry, with 3 regular pins and one
+Gd-157 2 wt-percent enriched.  The geometry is reflected, with reflections
+going through the center of the Gd-157 pin.  Said pin is split into 5 rings.
+"""
+
 import function
 import openmc
 import openmc_wrapper
 import numpy as np
 from collections import OrderedDict
+
 
 def generate_initial_number_density():
     """ Generates initial number density.
@@ -26,6 +34,7 @@ def generate_initial_number_density():
     fuel_dict['Gd-157'] = 1.0e10
     # fuel_dict['O-18'] = 9.51352e19 # Does not exist in ENDF71, merged into 17
 
+    # Concentration to be used for the gadolinium fuel pin
     fuel_gd_dict = OrderedDict()
     fuel_gd_dict['U-235'] = 1.03579e21
     fuel_gd_dict['U-238'] = 2.16943e22
@@ -103,12 +112,14 @@ def generate_initial_number_density():
     library_sab = OrderedDict()
     sab = OrderedDict()
 
+    # Toggle betweeen MCNP and NNDC data
     MCNP = False
 
     if MCNP:
         library['fuel_gd'] = '82c'
         library['fuel'] = '82c'
-        # We approximate temperature of everything as 600K, even though it was 580K.
+        # We approximate temperature of everything as 600K, even though it was
+        # actually 580K.
         library['gap'] = '81c'
         library['clad'] = '81c'
         library['cool'] = '81c'
@@ -144,6 +155,7 @@ def generate_initial_number_density():
 
     return materials
 
+
 def generate_geometry():
     """ Generates example geometry.
 
@@ -152,10 +164,11 @@ def generate_geometry():
     equal volume.  Reflections go through the center of this pin.
 
     In addition to what one would do with the general OpenMC geometry code, it
-    is necessary to create a dictionary, volume, that maps a cell ID to a volume.
-    Further, by naming cells the same as the above materials, the code can
-    automatically handle the mapping.
+    is necessary to create a dictionary, volume, that maps a cell ID to a
+    volume. Further, by naming cells the same as the above materials, the code
+    can automatically handle the mapping.
     """
+
     import math
     import numpy as np
 
@@ -194,7 +207,8 @@ def generate_geometry():
 
     # ----------------------------------------------------------------------
     # Fill pin 1 (the one with gadolinium)
-    gd_fuel_r = [openmc.ZCylinder(x0=0, y0=0, R=r_rings[i]) for i in range(n_rings)]
+    gd_fuel_r = [openmc.ZCylinder(x0=0, y0=0, R=r_rings[i])
+                 for i in range(n_rings)]
     gd_clad_ir = openmc.ZCylinder(x0=0, y0=0, R=r_gap)
     gd_clad_or = openmc.ZCylinder(x0=0, y0=0, R=r_clad)
 
@@ -205,7 +219,8 @@ def generate_geometry():
     volume[gd_fuel_cell[0].id] = v_ring / 4.0
 
     for i in range(n_rings-1):
-        gd_fuel_cell[i+1].region = +gd_fuel_r[i] & -gd_fuel_r[i+1] & +left & +bottom
+        gd_fuel_cell[i+1].region = +gd_fuel_r[i] & -gd_fuel_r[i+1] &\
+                                   +left & +bottom
         volume[gd_fuel_cell[i+1].id] = v_ring / 4.0
 
     # Gap
@@ -258,14 +273,17 @@ def generate_geometry():
     # Fill coolant
 
     cool_cell = openmc.Cell(name='cool')
-    cool_cell.region = +clad_or_s[0] & +clad_or_s[1] & +clad_or_s[2] & +gd_clad_or & +left & -right & +bottom & -top
-    volume[cool_cell.id] = (3/2 * pitch)**2 - 2.25 * v_fuel - 2.25 * v_gap - 2.25 * v_clad
+    cool_cell.region = +clad_or_s[0] & +clad_or_s[1] & +clad_or_s[2] &\
+                       +gd_clad_or & +left & -right & +bottom & -top
+    volume[cool_cell.id] = (3/2 * pitch)**2 - 2.25 * v_fuel - \
+        2.25 * v_gap - 2.25 * v_clad
 
     # ----------------------------------------------------------------------
     # Finalize geometry
     root = openmc.Universe(universe_id=0, name='root universe')
 
-    root.add_cells([cool_cell] + clad_cell + gap_cell + fuel_cell + gd_fuel_cell + [gd_fuel_clad] + [gd_fuel_gap])
+    root.add_cells([cool_cell] + clad_cell + gap_cell + fuel_cell +
+                   gd_fuel_cell + [gd_fuel_clad] + [gd_fuel_gap])
 
     geometry = openmc.Geometry()
     geometry.root_universe = root

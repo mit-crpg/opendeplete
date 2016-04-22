@@ -1,9 +1,31 @@
+""" The utilities module.
+
+Contains functions that can be used to post-process objects that come out of
+the results module.
+"""
+
 import numpy as np
 import os
 import fnmatch
 import pickle
 
+
 def get_eigval(directory):
+    """ Get eigenvalues as a function of time.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to read results from.
+
+    Returns
+    -------
+    time : np.array
+        Time for each step.
+    val : np.array
+        Eigenvalue for each step.
+    """
+
     # First, calculate how many step files are in the folder
 
     count = 0
@@ -32,7 +54,27 @@ def get_eigval(directory):
             time[ind] = result.time
     return time, val
 
+
 def get_atoms(directory, cell_list, nuc_list):
+    """ Get total atom count as a function of time.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to read results from.
+    cell_list : List[int]
+        List of cell IDs to extract data from.
+    nuc_list : List[str]
+        List of nuclides to extract data from.
+
+    Returns
+    -------
+    time : np.array
+        Time for each step.
+    val : Dict[Dict[np.array]]
+        Total number of atoms, indexed [cell id : int][nuclide : str]
+    """
+
     # First, calculate how many step files are in the folder
 
     count = 0
@@ -69,7 +111,32 @@ def get_atoms(directory, cell_list, nuc_list):
             time[ind] = result.time
     return time, val
 
+
 def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
+    """ Get volume averaged atom count as a function of time.
+
+    This function sums the atom concentration from each cell and then divides
+    by the volume sum.
+
+    Parameters
+    ----------
+    directory : str
+        Directory to read results from.
+    op : function.Operator
+        The operator used in this simulation. Contains volumes.
+    cell_list : List[int]
+        List of cell IDs to average.
+    nuc_list : List[str]
+        List of nuclides to extract data from.
+
+    Returns
+    -------
+    time : np.array
+        Time for each step.
+    val : Dict[np.array]
+        Volume averaged atoms, indexed [nuclide : str]
+    """
+
     # First, calculate how many step files are in the folder
 
     count = 0
