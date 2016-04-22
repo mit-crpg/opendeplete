@@ -1,13 +1,14 @@
-import geometry as geo
+import function
 import integrator
 import numpy as np
 import pickle
 import utilities
 import sys
 import openmc_wrapper
+import example_geometry
 
-# Form geometry
-geo = geo.Geometry()
+geometry, volume = example_geometry.generate_geometry()
+materials = example_geometry.generate_initial_number_density()
 
 # Create dt vector for 5.5 months with 15 day timesteps
 dt1 = 15*24*60*60 # 15 days
@@ -31,12 +32,14 @@ settings.inactive = 40
 settings.power = 2.337e15 # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
-integrator.initialize(geo, settings)
+
+op = function.Operator()
+op.initialize(geometry, volume, materials, settings)
 
 # Save results for future processing
-output = open('geometry_MCNP.pkl', 'wb')
-pickle.dump(geo, output)
+output = open('op_MCNP.pkl', 'wb')
+pickle.dump(op, output)
 output.close()
 
-integrator.MCNPX(geo, settings)
-
+import integrator
+integrator.QD(op)

@@ -69,7 +69,7 @@ def get_atoms(directory, cell_list, nuc_list):
             time[ind] = result.time
     return time, val
 
-def get_atoms_volaveraged(directory, geo, cell_list, nuc_list):
+def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
     # First, calculate how many step files are in the folder
 
     count = 0
@@ -87,8 +87,8 @@ def get_atoms_volaveraged(directory, geo, cell_list, nuc_list):
     # Calculate volume of cell_list
     vol = 0.0
     for cell in cell_list:
-        if cell in geo.volume:
-            vol += geo.volume[cell]
+        if cell in op.geometry.volume:
+            vol += op.geometry.volume[cell]
 
     # Read in file, get eigenvalue, close file
     for file in os.listdir(directory):

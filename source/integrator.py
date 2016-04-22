@@ -17,36 +17,35 @@ import math
 import concurrent.futures
 
 
-def predictor(geo, vec):
+def predictor(op):
     """ Runs a depletion problem using the predictor algorithm.
 
     This algorithm uses the beginning-of-timestep reaction rates for the whole
     timestep.  This is a first order algorithm.
 
     Args:
-        geo (Geometry): The geometry object to simulate on.
-        settings (openmc_wrapper.Settings): The settings of this simulation.
+        op (Operator): The operator object to simulate on.
     """
 
     # Save current directory
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(geo.settings.output_dir, exist_ok=True)
+    os.makedirs(op.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(geo.settings.output_dir)
+    os.chdir(op.settings.output_dir)
 
     # Generate initial conditions
-    vec = geo.start()
+    vec = op.start()
 
     time = 0.0
     ind = 0
 
-    for dt in geo.settings.dt_vec:
+    for dt in op.settings.dt_vec:
         # Evaluate function at vec to get mat
-        mat, eigvl, r1, seed = geo.eval(vec)
-        write_results(geo, eigvl, [vec], [r1], [1], [seed], time, ind)
+        mat, eigvl, r1, seed = op.eval(vec)
+        write_results(op, eigvl, [vec], [r1], [1], [seed], time, ind)
 
         # Update vec with the integrator.
         vec = matexp(mat, vec, dt)
@@ -54,14 +53,14 @@ def predictor(geo, vec):
         ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, seed = geo.eval(vec)
-    write_results(geo, eigvl, [vec], [r1], [1], [seed], time, ind)
+    mat, eigvl, r1, seed = op.eval(vec)
+    write_results(op, eigvl, [vec], [r1], [1], [seed], time, ind)
 
     # Return to origin
     os.chdir(dir_home)
 
 
-def MCNPX(geo, settings):
+def MCNPX(op):
     """ Runs a depletion problem using the MCNPX Predictor-Corrector algorithm.
 
     This algorithm is a second order algorithm where the predictor algorithm is
@@ -71,36 +70,35 @@ def MCNPX(geo, settings):
     Considered a "constant flux" algorithm.
 
     Args:
-        geo (Geometry): The geometry object to simulate on.
-        settings (openmc_wrapper.Settings): The settings of this simulation.
+        op (Operator): The operator object to simulate on.
     """
 
     # Save current directory
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(settings.output_dir, exist_ok=True)
+    os.makedirs(op.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(settings.output_dir)
+    os.chdir(op.settings.output_dir)
 
     # Generate initial conditions
-    vec = initialize(geo, settings)
+    vec = op.start()
 
     time = 0.0
     ind = 0
 
-    for dt in settings.dt_vec:
+    for dt in op.settings.dt_vec:
         # Evaluate function at vec to get mat
-        mat, eigvl, r1, s1 = function_evaluation(geo, vec, settings)
+        mat, eigvl, r1, s1 = op.eval(vec)
 
         # Step a half timestep
         v1 = matexp(mat, vec, dt/2)
 
         # Update function using new RNG
-        mat, dummy, r2, s2 = function_evaluation(geo, v1, settings)
+        mat, dummy, r2, s2 = op.eval(v1)
 
-        write_results(geo, eigvl, [vec, v1], [r1, r2], [0, 1], [s1, s2], time, ind)
+        write_results(op, eigvl, [vec, v1], [r1, r2], [0, 1], [s1, s2], time, ind)
 
         # Step a full timestep
         vec = matexp(mat, vec, dt)
@@ -108,14 +106,14 @@ def MCNPX(geo, settings):
         ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, s1 = function_evaluation(geo, vec, settings)
-    write_results(geo, eigvl, [vec], [r1], [1], [s1], time, ind)
+    mat, eigvl, r1, s1 = op.eval(vec)
+    write_results(op, eigvl, [vec], [r1], [1], [s1], time, ind)
 
     # Return to origin
     os.chdir(dir_home)
 
 
-def QD(geo, settings):
+def QD(op):
     """ Runs a depletion problem using a quadratic predictor-corrector algorithm.
 
     This algorithm is a third order algorithm in which a linear extrapolation of
@@ -129,21 +127,20 @@ def QD(geo, settings):
     1987-1995.
 
     Args:
-        geo (Geometry): The geometry object to simulate on.
-        settings (openmc_wrapper.Settings): The settings of this simulation.
+        op (Operator): The operator object to simulate on.
     """
 
     # Save current directory
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(settings.output_dir, exist_ok=True)
+    os.makedirs(op.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(settings.output_dir)
+    os.chdir(op.settings.output_dir)
 
     # Generate initial conditions
-    vec_bos = initialize(geo, settings)
+    vec_bos = op.start()
     vec_ps = copy.deepcopy(vec_bos)
 
     # Dummy variables to keep in scope
@@ -156,19 +153,19 @@ def QD(geo, settings):
     time = 0.0
     ind = 0
 
-    for i in range(len(settings.dt_vec)):
-        dt = settings.dt_vec[i]
+    for i in range(len(op.settings.dt_vec)):
+        dt = op.settings.dt_vec[i]
         if i == 0:
             # Constant Extrapolation
-            mat_bos, eigvl, r1, s1 = function_evaluation(geo, vec_bos, settings)
+            mat_bos, eigvl, r1, s1 = op.eval(vec_bos)
 
             # Get EOS
             vec_eos = matexp(mat_bos, vec_bos, dt)
 
             # Linear Interpolation
-            mat_eos, eigvl, r2, s2 = function_evaluation(geo, vec_eos, settings)
+            mat_eos, eigvl, r2, s2 = op.eval(vec_eos)
 
-            write_results(geo, eigvl, [vec_bos, vec_eos], [r1, r2], [1/2, 1/2], [s1, s2], time, ind)
+            write_results(op, eigvl, [vec_bos, vec_eos], [r1, r2], [1/2, 1/2], [s1, s2], time, ind)
 
             mat_ext = [mat_bos[i] * 1/2 + mat_eos[i] * 1/2 for i in range(cells)]
             vec_bos = matexp(mat_ext, vec_bos, dt)
@@ -182,8 +179,8 @@ def QD(geo, settings):
             ind += 1
         else:
             # Constant Extrapolation
-            dt_l = settings.dt_vec[i-1]
-            mat_bos, eigvl, r1, s1 = function_evaluation(geo, vec_bos, settings)
+            dt_l = op.settings.dt_vec[i-1]
+            mat_bos, eigvl, r1, s1 = op.eval(vec_bos)
 
             # Get EOS
             c1 = (-dt/(2.0 * dt_l))
@@ -192,14 +189,14 @@ def QD(geo, settings):
             vec_eos = matexp(mat_int, vec_bos, dt)
 
             # Quadratic Extrapolation
-            mat_eos, eigvl, r2, s2 = function_evaluation(geo, vec_eos, settings)
+            mat_eos, eigvl, r2, s2 = op.eval(vec_eos)
 
             # Store results
             c1 = (-dt**2/(6.0*dt_l*(dt + dt_l)))
             c2 = (1/2 + dt/(6.0*dt_l))
             c3 = (1/2 - dt/(6.0*(dt+dt_l)))
             # TODO find an acceptable compromise for AB-AM schemes.
-            write_results(geo, eigvl, [vec_bos, vec_eos], [rps, r1, r2], [c1, c2, c3],  [s1, s2], time, ind)
+            write_results(op, eigvl, [vec_bos, vec_eos], [rps, r1, r2], [c1, c2, c3],  [s1, s2], time, ind)
 
             # Get new BOS
             mat_ext = [mat_ps[i]*c1 + mat_bos[i]*c2 + mat_eos[i]*c3 for i in range(cells)]
@@ -213,8 +210,8 @@ def QD(geo, settings):
             ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, s1 = function_evaluation(geo, vec_bos, settings)
-    write_results(geo, eigvl, [vec_bos], [r1], [1], [s1], time, ind)
+    mat, eigvl, r1, s1 = op.eval(vec_bos)
+    write_results(op, eigvl, [vec_bos], [r1], [1], [s1], time, ind)
 
     # Return to origin
     os.chdir(dir_home)
