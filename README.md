@@ -12,7 +12,7 @@ Installation
 ------------
 
 This tool is currently written against the OpenMC/Develop branch Python API.  It
-is also written using features of Python introduced in version 3.2.  As such,
+is also written using features of Python introduced in version 3.3.  As such,
 one should follow the installation guide for
 [OpenMC](https://github.com/mit-crpg/openmc) for Python 3.
 
