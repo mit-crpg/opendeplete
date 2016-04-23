@@ -26,8 +26,8 @@ class DepletionChain:
         Maps a nuclide name to an index in yields.fis_yield_data
     yields : nuclide.Yield
         Yield object for fission.
-    reaction_list : List[str]
-        List of all possible reactions in chain.
+    reaction_to_ind : OrderedDict[int]
+        Dictionary mapping a reaction name to an index in ReactionRates.
     """
 
     def __init__(self):
@@ -40,7 +40,7 @@ class DepletionChain:
 
         self.yields = None
 
-        self.reaction_list = None
+        self.react_to_ind = None
 
     def xml_read(self, filename):
         """ Reads a depletion chain xml file.
@@ -63,7 +63,7 @@ class DepletionChain:
         self.n_nuclides = 0
         self.n_fp_nuclides = 0
         self.nuclides = []
-        self.reaction_list = []
+        self.react_to_ind = OrderedDict()
         self.nuclide_dict = OrderedDict()
 
         # Load XML tree
@@ -73,6 +73,7 @@ class DepletionChain:
         decay_node = root.find('decay_constants')
 
         nuclide_index = 0
+        reaction_index = 0
 
         for nuclide_node in decay_node.findall('nuclide_table'):
             self.n_nuclides += 1
@@ -114,8 +115,9 @@ class DepletionChain:
                     r_type = reaction_node.get('type')
 
                     # Add to total reaction types
-                    if r_type not in self.reaction_list:
-                        self.reaction_list.append(r_type)
+                    if r_type not in self.react_to_ind:
+                        self.react_to_ind[r_type] = reaction_index
+                        reaction_index += 1
 
                     nuc.reaction_type.append(r_type)
                     # If the type is not fission, get target, otherwise
@@ -196,13 +198,15 @@ class DepletionChain:
 
             product_index += 1
 
-    def form_matrix(self, rates):
+    def form_matrix(self, rates, cell_id):
         """ Forms depletion matrix.
 
         Parameters
         ----------
         rates : reaction_rates.ReactionRates
             Reaction rates to form matrix from.
+        cell_id : int
+            Cell coordinate in rates to evaluate for.
 
         Returns
         -------
@@ -236,33 +240,36 @@ class DepletionChain:
                         matrix[k, i] += \
                             nuclide.branching_ratio[j] * decay_constant
 
-            for j in range(nuclide.n_reaction_paths):
-                # Reaction paths
-                n_rates = rates.rate[nuclide.name]
-                # Loss
-                matrix[i, i] -= n_rates[j]
+            if nuclide.name in rates.nuc_to_ind:
+                # Extract all reactions for this nuclide in this cell
+                nuc_rates = rates[cell_id, nuclide.name, :]
+                for j in range(nuclide.n_reaction_paths):
+                    path = nuclide.reaction_type[j]
+                    # Extract reaction index, and then final reaction rate
+                    r_id = rates.react_to_ind[path]
+                    path_rate = nuc_rates[r_id]
 
-                target_nuclide = nuclide.reaction_target[j]
+                    # Loss term
+                    matrix[i, i] -= path_rate
 
-                # TODO allow for branching ratio reactions.
-                # For example, Am-241 (n,gamma) -> Am-242 or Am-242m
-                # Or, to allow for alpha accumulation in fuel, etc.
+                    # Gain term
+                    target_nuclide = nuclide.reaction_target[j]
 
-                # Gain
-                # Allow for total annihilation for debug purposes
-                if target_nuclide != 'Nothing':
-                    if nuclide.reaction_type[j] != 'fission':
-                        k = self.nuclide_dict[target_nuclide]
-                        matrix[k, i] += n_rates[j]
-                    else:
-                        m = self.precursor_dict[nuclide.name]
+                    # Allow for total annihilation for debug purposes
+                    if target_nuclide != 'Nothing':
+                        if path != 'fission':
+                            k = self.nuclide_dict[target_nuclide]
+                            matrix[k, i] += path_rate
+                        else:
+                            m = self.precursor_dict[nuclide.name]
 
-                        for k in range(self.yields.n_fis_prod):
-                            l = self.nuclide_dict[self.yields.name[k]]
-                            # Todo energy
-                            matrix[l, i] += \
-                                self.yields.fis_yield_data[k, 0, m] * \
-                                n_rates[j]
+                            for k in range(self.yields.n_fis_prod):
+                                l = self.nuclide_dict[self.yields.name[k]]
+                                # Todo energy
+                                matrix[l, i] += \
+                                    self.yields.fis_yield_data[k, 0, m] * \
+                                    path_rate
+
         matrix = matrix.tocsr()
         return matrix
 
@@ -292,11 +299,12 @@ def matrix_wrapper(input_tuple):
     ----------
     input_tuple : Tuple
         Index 0 is the chain (depletion_chain.DepletionChain), index 1 is the
-        reaction rate array (reaction_rates.ReactionRates).
+        reaction rate array (reaction_rates.ReactionRates), index 2 is the
+        cell_id.
 
     Returns
     -------
     scipy.sparse.csr_matrix
         The matrix for this reaction rate.
     """
-    return input_tuple[0].form_matrix(input_tuple[1])
+    return input_tuple[0].form_matrix(input_tuple[1], input_tuple[2])

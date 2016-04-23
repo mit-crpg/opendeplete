@@ -127,6 +127,11 @@ class Geometry:
         Cell-by-Cell power.  Indexed by cell ID.
     mat_name : OrderedDict[str]
         The name of region each cell is set to.  Indexed by cell ID.
+    burn_cell_to_id : OrderedDict[int]
+        Dictionary mapping cell ID (as a string) to an index in reaction_rates.
+    burn_nuc_to_id : OrderedDict[int]
+        Dictionary mapping nuclide name (as a string) to an index in
+        reaction_rates.
     """
 
     def __init__(self):
@@ -142,6 +147,8 @@ class Geometry:
         self.reaction_rates = None
         self.power = None
         self.mat_name = None
+        self.burn_cell_to_ind = None
+        self.burn_nuc_to_ind = None
 
     def initialize(self, settings):
         """ Initializes the geometry.
@@ -165,7 +172,10 @@ class Geometry:
 
         self.number_density = OrderedDict()
         self.mat_name = OrderedDict()
+        self.burn_cell_to_ind = OrderedDict()
         self.burn_list = []
+
+        cell_ind = 0
 
         # First, for each cell, create an entry in number_density
         cells = self.geometry.root_universe.get_all_cells()
@@ -181,6 +191,8 @@ class Geometry:
             # If should burn, add to burn list:
             if self.materials.burn[name]:
                 self.burn_list.append(cid)
+                self.burn_cell_to_ind[str(cid)] = cell_ind
+                cell_ind += 1
 
         # Then, write geometry.xml
         geometry_file = openmc.GeometryFile()
@@ -191,10 +203,10 @@ class Geometry:
         self.load_participating(settings.cross_sections)
 
         # Create reaction rate tables
-        self.reaction_rates = OrderedDict()
-        for cell in self.burn_list:
-            self.reaction_rates[cell] = \
-                reaction_rates.ReactionRates(self.chain)
+        self.reaction_rates = \
+            reaction_rates.ReactionRates(self.burn_cell_to_ind,
+                                         self.burn_nuc_to_ind,
+                                         self.chain.react_to_ind)
 
         # Finally, calculate total number densities
         self.total_number = OrderedDict()
@@ -246,13 +258,11 @@ class Geometry:
         mat = self.depletion_matrix_list()
         t4 = time.time()
 
-        rates = extract_rates(self)
-
         print("Time to openmc: ", t2-t1)
         print("Time to unpack: ", t3-t2)
         print("Time to matrix: ", t4-t3)
 
-        return mat, k, rates, self.seed
+        return mat, k, self.reaction_rates, self.seed
 
     def start(self):
         """ Creates initial files, and returns initial vector.
@@ -345,7 +355,6 @@ class Geometry:
 
         # Set seed
         seed = random.randint(1, sys.maxsize-1)
-        seed = 1
         self.seed = seed
         settings_file.seed = seed
 
@@ -381,7 +390,7 @@ class Geometry:
             if key in chain.nuclide_dict:
                 tally_dep.add_nuclide(key)
 
-        for reaction in chain.reaction_list:
+        for reaction in chain.react_to_ind:
             tally_dep.add_score(reaction)
 
         tallies_file.add_tally(tally_dep)
@@ -411,8 +420,9 @@ class Geometry:
         # map, so I need to concatenate the data into a single variable with
         # which a map works.
         input_list = []
-        for rate in self.reaction_rates:
-            input_list.append((self.chain, self.reaction_rates[rate]))
+        for cell in self.burn_cell_to_ind:
+            cell_ind = self.burn_cell_to_ind[cell]
+            input_list.append((self.chain, self.reaction_rates, cell_ind))
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
             matrices = executor.map(depletion_chain.matrix_wrapper, input_list)
@@ -578,70 +588,53 @@ class Geometry:
         # Unpack depletion list
         tally_dep = statepoint.get_tally(id=1)
 
-        df = tally_dep.get_pandas_dataframe()
-        for i in range(len(self.burn_list)):
-            cell = self.burn_list[i]
+        # Zero out reaction_rates
+        self.reaction_rates[:, :, :] = 0.0
 
+        df = tally_dep.get_pandas_dataframe()
+        # For each cell to be burned
+        for cell_str in self.burn_cell_to_ind:
+            cell = int(cell_str)
             df_cell = df[df["cell"] == cell]
 
-            # For each nuclide that is in the depletion chain
-            for key in self.total_number[cell]:
-                if key in self.chain.nuclide_dict:
-                    # Check if in participating nuclides
-                    if key in self.participating_nuclides:
-                        # Pull out nuclide object to iterate over reaction rate
-                        nuclide = self.chain.nuc_by_ind(key)
+            # For each nuclide that was tallied
+            for nuc in self.burn_nuc_to_ind:
 
-                        df_nuclide = df_cell[df_cell["nuclide"] == key]
+                # If density = 0, there was no tally
+                if nuc not in self.total_number[cell]:
+                    continue
 
-                        for j in range(nuclide.n_reaction_paths):
-                            tally_type = nuclide.reaction_type[j]
-                            value = df_nuclide[df_nuclide["score"] ==
-                                               tally_type]["mean"].values[0]
+                nuclide = self.chain.nuc_by_ind(nuc)
 
-                            self.reaction_rates[cell].rate[nuclide.name][j] = \
-                                value
+                df_nuclide = df_cell[df_cell["nuclide"] == nuc]
 
-                            # Calculate power if fission
-                            if tally_type == "fission":
-                                power = value * nuclide.fission_power
-                                if cell not in self.power:
-                                    self.power[cell] = power
-                                else:
-                                    self.power[cell] += power
-                    else:
-                        # Set reaction rates to zero
-                        nuclide = self.chain.nuc_by_ind(key)
+                # For each reaction pathway
+                for j in range(nuclide.n_reaction_paths):
+                    # Extract tally
+                    tally_type = nuclide.reaction_type[j]
 
-                        df_nuclide = df_cell[df_cell["nuclide"] == key]
+                    k = self.reaction_rates.react_to_ind[tally_type]
+                    value = df_nuclide[df_nuclide["score"] ==
+                                       tally_type]["mean"].values[0]
 
-                        for j in range(nuclide.n_reaction_paths):
-                            self.reaction_rates[cell].rate[nuclide.name][j] = \
-                                0.0
+                    # The reaction rates are normalized to total number of
+                    # atoms in the simulation.
+                    self.reaction_rates[cell_str, nuclide.name, k] = value \
+                        / self.total_number[cell][nuc]
+
+                    # Calculate power if fission
+                    if tally_type == "fission":
+                        power = value * nuclide.fission_power
+                        if cell not in self.power:
+                            self.power[cell] = power
+                        else:
+                            self.power[cell] += power
 
         # ---------------------------------------------------------------------
         # Normalize to power
         original_power = sum(self.power.values())
 
-        test = 0.0
-
-        for i in range(len(self.burn_list)):
-            cell = self.burn_list[i]
-
-            # For each nuclide that is in the depletion chain
-            for key in self.total_number[cell]:
-                if key in self.chain.nuclide_dict:
-                    nuclide = self.chain.nuc_by_ind(key)
-
-                    for j in range(nuclide.n_reaction_paths):
-
-                        if self.number_density[cell][key] != 0:
-                            # Normalize reaction rates and divide out number of
-                            # nuclides, yielding cross section.
-                            self.reaction_rates[cell].rate[nuclide.name][j] \
-                                *= (new_power / original_power)
-                            self.reaction_rates[cell].rate[nuclide.name][j] \
-                                /= self.total_number[cell][key]
+        self.reaction_rates[:, :, :] *= (new_power / original_power)
 
         return k
 
@@ -664,6 +657,8 @@ class Geometry:
 
         tree = ET.parse(filename)
         root = tree.getroot()
+        self.burn_nuc_to_ind = OrderedDict()
+        nuc_ind = 0
 
         for nuclide_node in root.findall('ace_table'):
             name = nuclide_node.get('alias')
@@ -671,4 +666,10 @@ class Geometry:
                 continue
             name_parts = name.split(".")
 
-            self.participating_nuclides.add(name_parts[0])
+            # Make a burn list of the union of nuclides in cross_sections.xml
+            # and nuclides in depletion chain.
+            if name_parts[0] not in self.participating_nuclides:
+                self.participating_nuclides.add(name_parts[0])
+                if name_parts[0] in self.chain.nuclide_dict:
+                    self.burn_nuc_to_ind[name_parts[0]] = nuc_ind
+                    nuc_ind += 1

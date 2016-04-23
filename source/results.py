@@ -3,6 +3,8 @@
 Contains results generation and saving capabilities.
 """
 
+import reaction_rates
+
 
 class Results:
     """ The Results class.
@@ -17,9 +19,8 @@ class Results:
         The eigenvalue of the problem.
     d_vec : List[List[numpy.array]]
         List of each substep number density arrays.
-    rates : List[Dict[Dict[Dict[float]]]]
-        The reaction rates for each substep.  Indexed
-        rates[substep][cell id : int][nuclide : str][reaction path : str].
+    rates : List[reaction_rates.ReactionRates]
+        The reaction rates for each substep.
     weights : List[float]
         Weights for each substep to get average rates.
     seeds : List[int]
@@ -34,14 +35,12 @@ class Results:
     num : List[OrderedDict[OrderedDict[float]]]
         List of total_number, indexed as
         [substep : int][cell id : int][nuclide name : str].
-    rates : List[Dict[Dict[Dict[float]]]]
-        The reaction rates for each substep.  Indexed:
-        rates[substep][cell id : int][nuclide : str][reaction path : str].
+    rates : List[reaction_rates.ReactionRates]
+        The reaction rates for each substep.
     weights : List[float]
         Weights for each substep to get average rates.
-    rate_bar : Dict[Dict[Dict[float]]]
-        The average reaction rate throughout a timestep. Indexed
-        rate_bar[cell id : int][nuclide : str][reaction path : str].
+    rate_bar : reaction_rates.ReactionRates
+        The average reaction rate throughout a timestep.
     seeds : List[int]
         Seeds for each substep.
     time : float
@@ -79,78 +78,32 @@ class Results:
         self.time = time
 
 
-def extract_rates(op):
-    """ Extracts rates from an operator.
-
-    Parameters
-    ----------
-    op : function.Operator
-        The operator to extract rates from.
-
-    Returns
-    -------
-    rates : Dict[Dict[Dict[float]]]
-        Reaction rates, indexed as
-        rates[cell id : int][nuclide name : str][reaction path : str].
-    """
-
-    rates = {}
-    # Extract results
-    for cell in op.burn_list:
-        rates[cell] = {}
-        for nuclide in op.chain.nuclides:
-            name = nuclide.name
-            rates[cell][name] = {}
-            for i in range(nuclide.n_reaction_paths):
-                rates[cell][name][nuclide.reaction_type[i]] = \
-                    op.reaction_rates[cell].rate[name][i]
-    return rates
-
-
 def merge_results(rates_array, weights_array):
     """ Merges rates by weights.
 
     Parameters
     ----------
-    rates_array : List[Dict[Dict[Dict[float]]]]
-        The reaction rates for each substep.  Indexed:
-        rates[substep][cell id : int][nuclide : str][reaction path : str].
+    rates_array : List[reaction_rates.ReactionRates]
+        The reaction rates for each substep.
     weights_array : List[float]
         The weights of each substep.
 
     Returns
     -------
-    rates : Dict[Dict[Dict[float]]]
-        Reaction rates, indexed as
-        rates[cell id : int][nuclide name : str][reaction path : str].
+    r_bar : reaction_rates.ReactionRates
+        Merged reaction rates.
     """
 
-    import copy
+    # First, create an empty rate object
+    r_bar = reaction_rates.ReactionRates(rates_array[0].cell_to_ind,
+                                         rates_array[0].nuc_to_ind,
+                                         rates_array[0].react_to_ind)
 
-    # Calculates the merged rates
-    rates = {}
-
-    # For each simulation
+    # Then, merge results
     for i in range(len(weights_array)):
-        # For each cell
-        for c in rates_array[i]:
-            if c not in rates:
-                rates[c] = {}
+        r_bar.rates += rates_array[i].rates
 
-            # For each nuclide
-            for n in rates_array[i][c]:
-                if n not in rates[c]:
-                    rates[c][n] = {}
-
-                # For each reaction
-                for r in rates_array[i][c][n]:
-                    if r not in rates[c][n]:
-                        rates[c][n][r] = \
-                            rates_array[i][c][n][r] * weights_array[i]
-                    else:
-                        rates[c][n][r] += \
-                            rates_array[i][c][n][r] * weights_array[i]
-    return rates
+    return r_bar
 
 
 def write_results(op, eigvl, d_vec, rates, weights, seeds, time, ind):
