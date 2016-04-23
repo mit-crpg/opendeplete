@@ -23,18 +23,13 @@ t_ref = np.array([0.00, 0.05, 0.10, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75,
 
 t_ref *= 3600 * 24 * 30 / 1.022  # Convert from MWd-kgHM to seconds
 
-# Load geometry
-input = open(folder + 'op_MCNP.pkl', 'rb')
-op = pickle.load(input)
-input.close()
-
 # Set variables for where the data is, and what we want to read out.
 result_folder = folder + "test"
 cells = [10000, 10001, 10002, 10003, 10004]
 nuclides = ['Xe-135', 'U-235', 'Gd-157']
 
 # Load data
-x, y = utilities.get_atoms_volaveraged(result_folder, op, cells, nuclides)
+x, y = utilities.get_atoms_volaveraged(result_folder, cells, nuclides)
 
 
 plt.semilogy(x, y['Gd-157'])

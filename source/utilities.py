@@ -8,6 +8,7 @@ import numpy as np
 import os
 import fnmatch
 import pickle
+import results
 
 
 def get_eigval(directory):
@@ -45,9 +46,7 @@ def get_eigval(directory):
             ind = int(name[0][4::])
 
             # Read file
-            handle = open(directory + '/' + file, 'rb')
-            result = pickle.load(handle)
-            handle.close()
+            result = results.read_results(directory + '/' + file)
 
             # Extract results
             val[ind] = result.k
@@ -99,9 +98,7 @@ def get_atoms(directory, cell_list, nuc_list):
             ind = int(name[0][4::])
 
             # Read file
-            handle = open(directory + '/' + file, 'rb')
-            result = pickle.load(handle)
-            handle.close()
+            result = results.read_results(directory + '/' + file)
 
             for cell in cell_list:
                 if cell in result.num[0]:
@@ -112,7 +109,7 @@ def get_atoms(directory, cell_list, nuc_list):
     return time, val
 
 
-def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
+def get_atoms_volaveraged(directory, cell_list, nuc_list):
     """ Get volume averaged atom count as a function of time.
 
     This function sums the atom concentration from each cell and then divides
@@ -122,8 +119,6 @@ def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
     ----------
     directory : str
         Directory to read results from.
-    op : function.Operator
-        The operator used in this simulation. Contains volumes.
     cell_list : List[int]
         List of cell IDs to average.
     nuc_list : List[str]
@@ -152,10 +147,12 @@ def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
         val[nuc] = np.zeros(count)
 
     # Calculate volume of cell_list
+    # Load first result
+    result_0 = results.read_results(directory + '/step0.pklz')
     vol = 0.0
     for cell in cell_list:
-        if cell in op.geometry.volume:
-            vol += op.geometry.volume[cell]
+        if cell in result_0.volume:
+            vol += result_0.volume[cell]
 
     # Read in file, get eigenvalue, close file
     for file in os.listdir(directory):
@@ -165,9 +162,7 @@ def get_atoms_volaveraged(directory, op, cell_list, nuc_list):
             ind = int(name[0][4::])
 
             # Read file
-            handle = open(directory + '/' + file, 'rb')
-            result = pickle.load(handle)
-            handle.close()
+            result = results.read_results(directory + '/' + file)
 
             for cell in cell_list:
                 if cell in result.num[0]:

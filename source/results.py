@@ -4,6 +4,8 @@ Contains results generation and saving capabilities.
 """
 
 import reaction_rates
+import lzma
+import pickle
 
 
 class Results:
@@ -45,6 +47,8 @@ class Results:
         Seeds for each substep.
     time : float
         Time at beginning of step.
+    volume : OrderedDict[float]
+        Dictionary mapping cell id to volume.
     """
 
     def __init__(self, op, eigvl, d_vec, rates, weights, seeds, time):
@@ -76,6 +80,9 @@ class Results:
 
         # Save time
         self.time = time
+
+        # Save volume
+        self.volume = op.geometry.volume
 
 
 def merge_results(rates_array, weights_array):
@@ -130,14 +137,36 @@ def write_results(op, eigvl, d_vec, rates, weights, seeds, time, ind):
         Timestep index.
     """
 
-    import pickle
-
     # Create results
     res = Results(op, eigvl, d_vec, rates, weights, seeds, time)
 
-    # Pickle resutls
-    output = open('step' + str(ind) + '.pkl', 'wb')
+    # Pickle results
+    output = lzma.open('step' + str(ind) + '.pklz', 'wb')
 
     pickle.dump(res, output)
 
     output.close()
+
+
+def read_results(filename):
+    """ Reads out a results object from a compressed file.
+
+    Parameters
+    ----------
+    filename : str
+        The filename to read from.
+
+    Returns
+    -------
+    results : Results
+        The result object encapsulated.
+    """
+
+    # Unpickle results
+    handle = lzma.open(filename, 'rb')
+
+    results = pickle.load(handle)
+
+    handle.close()
+
+    return results

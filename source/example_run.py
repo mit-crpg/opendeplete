@@ -38,10 +38,5 @@ settings.output_dir = 'test'
 op = function.Operator()
 op.initialize(geometry, volume, materials, settings)
 
-# Save results for future processing
-output = open('op_MCNP.pkl', 'wb')
-pickle.dump(op, output)
-output.close()
-
 # Perform simulation using the MCNPX/MCNP6 algorithm
 integrator.MCNPX(op)
