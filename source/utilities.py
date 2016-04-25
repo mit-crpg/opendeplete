@@ -101,10 +101,10 @@ def get_atoms(directory, cell_list, nuc_list):
             result = results.read_results(directory + '/' + file)
 
             for cell in cell_list:
-                if cell in result.num[0]:
+                if str(cell) in result.num[0].cell_to_ind:
                     for nuc in nuc_list:
-                        if nuc in result.num[0][cell]:
-                            val[cell][nuc][ind] = result.num[0][cell][nuc]
+                        if nuc in result.num[0].nuc_to_ind:
+                            val[cell][nuc][ind] = result.num[0][str(cell), nuc]
             time[ind] = result.time
     return time, val
 
@@ -165,9 +165,9 @@ def get_atoms_volaveraged(directory, cell_list, nuc_list):
             result = results.read_results(directory + '/' + file)
 
             for cell in cell_list:
-                if cell in result.num[0]:
+                if str(cell) in result.num[0].cell_to_ind:
                     for nuc in nuc_list:
-                        if nuc in result.num[0][cell]:
-                            val[nuc][ind] += result.num[0][cell][nuc]/vol
+                        if nuc in result.num[0].nuc_to_ind:
+                            val[nuc][ind] += result.num[0][str(cell), nuc]/vol
             time[ind] = result.time
     return time, val

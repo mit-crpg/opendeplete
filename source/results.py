@@ -4,6 +4,7 @@ Contains results generation and saving capabilities.
 """
 
 import reaction_rates
+import concentrations
 import lzma
 import pickle
 
@@ -34,9 +35,8 @@ class Results:
     ----------
     k : float
         Eigenvalue at beginning of step.
-    num : List[OrderedDict[OrderedDict[float]]]
-        List of total_number, indexed as
-        [substep : int][cell id : int][nuclide name : str].
+    num : List[concentrations.Concentrations]
+        List of total_number.
     rates : List[reaction_rates.ReactionRates]
         The reaction rates for each substep.
     weights : List[float]
@@ -64,7 +64,9 @@ class Results:
             op.set_density(vec)
 
             # op.total_number is already in the right format:
-            self.num.append(copy.deepcopy(op.total_number))
+            concentration = concentrations.Concentrations()
+            concentration.convert_nested_dict(op.total_number)
+            self.num.append(concentration)
 
         # Extract rates
         self.rates = rates
