@@ -6,7 +6,7 @@ import pickle
 import utilities
 
 # Installation Folder
-folder = "/home/cjosey/code/opendeplete/"
+folder = "/home/cjosey/code/opendeplete/source/"
 
 # Casmo reference
 # Note, CASMO will be more accurate due to the decay chain and the power/time
@@ -24,7 +24,7 @@ t_ref = np.array([0.00, 0.05, 0.10, 0.25, 0.50, 0.75, 1.00, 1.25, 1.50, 1.75,
 t_ref *= 3600 * 24 * 30 / 1.022  # Convert from MWd-kgHM to seconds
 
 # Set variables for where the data is, and what we want to read out.
-result_folder = folder + "test2"
+result_folder = folder + "test"
 cells = [10000, 10001, 10002, 10003, 10004]
 nuclides = ['Xe-135', 'U-235', 'Gd-157']
 
