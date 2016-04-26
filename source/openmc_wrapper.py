@@ -195,9 +195,7 @@ class Geometry:
                 cell_ind += 1
 
         # Then, write geometry.xml
-        geometry_file = openmc.GeometryFile()
-        geometry_file.geometry = self.geometry
-        geometry_file.export_to_xml()
+        self.geometry.export_to_xml()
 
         # Load participating nuclides
         self.load_participating(settings.cross_sections)
@@ -273,9 +271,7 @@ class Geometry:
             Total density for initial conditions.
         """
         # Write geometry.xml
-        geometry_file = openmc.GeometryFile()
-        geometry_file.geometry = self.geometry
-        geometry_file.export_to_xml()
+        self.geometry.export_to_xml()
 
         # Return number density vector
         return self.total_density_list()
@@ -313,7 +309,7 @@ class Geometry:
 
             i += 1
 
-        materials_file = openmc.MaterialsFile()
+        materials_file = openmc.Materials()
         materials_file.add_materials(mat)
         materials_file.export_to_xml()
 
@@ -343,7 +339,7 @@ class Geometry:
         particles = settings.particles
 
         # Just a generic settings file to get it running.
-        settings_file = openmc.SettingsFile()
+        settings_file = openmc.Settings()
         settings_file.batches = batches
         settings_file.inactive = inactive
         settings_file.particles = particles
@@ -373,7 +369,7 @@ class Geometry:
         # Create tallies for depleting regions
         tally_ind = 1
         cell_filter_dep = openmc.Filter(type='cell', bins=self.burn_list)
-        tallies_file = openmc.TalliesFile()
+        tallies_file = openmc.Tallies()
 
         nuc_superset = set()
 
