@@ -521,6 +521,11 @@ class Geometry:
 
         cell_i = 0
 
+        # First, ensure self.total_number is clear
+        for cell in self.total_number:
+            for nuc in self.total_number[cell]:
+                self.total_number[cell][nuc] = 0.0
+
         for cell in self.burn_list:
 
             # Update total_number first
