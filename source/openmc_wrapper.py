@@ -522,9 +522,10 @@ class Geometry:
         cell_i = 0
 
         # First, ensure self.total_number is clear
-        for cell in self.total_number:
-            for nuc in self.total_number[cell]:
-                self.total_number[cell][nuc] = 0.0
+        for cell in self.burn_list:
+            for i in range(len(self.chain.nuclides)):
+                if self.chain.nuclides[i].name in self.total_number[cell]:
+                    self.total_number[cell][self.chain.nuclides[i].name] = 0.0
 
         for cell in self.burn_list:
 
