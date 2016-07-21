@@ -525,7 +525,7 @@ class Geometry:
         for cell in self.burn_list:
             for i in range(len(self.chain.nuclides)):
                 if self.chain.nuclides[i].name in self.total_number[cell]:
-                    self.total_number[cell][self.chain.nuclides[i].name] = 0.0
+                    self.total_number[cell].pop(self.chain.nuclides[i].name, None)
 
         for cell in self.burn_list:
 
