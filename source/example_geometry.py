@@ -21,83 +21,83 @@ def generate_initial_number_density():
 
     # Concentration to be used for all fuel pins
     fuel_dict = OrderedDict()
-    fuel_dict['U-235'] = 1.05692e21
-    fuel_dict['U-234'] = 1.00506e19
-    fuel_dict['U-238'] = 2.21371e22
-    fuel_dict['O-16'] = 4.62954e22
-    fuel_dict['O-17'] = 1.127684e20
-    fuel_dict['I-135'] = 1.0e10
-    fuel_dict['Xe-135'] = 1.0e10
-    fuel_dict['Xe-136'] = 1.0e10
-    fuel_dict['Cs-135'] = 1.0e10
-    fuel_dict['Gd-156'] = 1.0e10
-    fuel_dict['Gd-157'] = 1.0e10
-    # fuel_dict['O-18'] = 9.51352e19 # Does not exist in ENDF71, merged into 17
+    fuel_dict['U235'] = 1.05692e21
+    fuel_dict['U234'] = 1.00506e19
+    fuel_dict['U238'] = 2.21371e22
+    fuel_dict['O16'] = 4.62954e22
+    fuel_dict['O17'] = 1.127684e20
+    fuel_dict['I135'] = 1.0e10
+    fuel_dict['Xe135'] = 1.0e10
+    fuel_dict['Xe136'] = 1.0e10
+    fuel_dict['Cs135'] = 1.0e10
+    fuel_dict['Gd156'] = 1.0e10
+    fuel_dict['Gd157'] = 1.0e10
+    # fuel_dict['O18'] = 9.51352e19 # Does not exist in ENDF71, merged into 17
 
     # Concentration to be used for the gadolinium fuel pin
     fuel_gd_dict = OrderedDict()
-    fuel_gd_dict['U-235'] = 1.03579e21
-    fuel_gd_dict['U-238'] = 2.16943e22
-    fuel_gd_dict['Gd-156'] = 3.95517E+10
-    fuel_gd_dict['Gd-157'] = 1.08156e20
-    fuel_gd_dict['O-16'] = 4.64035e22
-    fuel_dict['I-135'] = 1.0e10
-    fuel_dict['Xe-136'] = 1.0e10
-    fuel_dict['Xe-135'] = 1.0e10
-    fuel_dict['Cs-135'] = 1.0e10
+    fuel_gd_dict['U235'] = 1.03579e21
+    fuel_gd_dict['U238'] = 2.16943e22
+    fuel_gd_dict['Gd156'] = 3.95517E+10
+    fuel_gd_dict['Gd157'] = 1.08156e20
+    fuel_gd_dict['O16'] = 4.64035e22
+    fuel_dict['I135'] = 1.0e10
+    fuel_dict['Xe136'] = 1.0e10
+    fuel_dict['Xe135'] = 1.0e10
+    fuel_dict['Cs135'] = 1.0e10
     # There are a whole bunch of 1e-10 stuff here.
 
     # Concentration to be used for cladding
     clad_dict = OrderedDict()
-    clad_dict['O-16'] = 3.07427e20
-    clad_dict['O-17'] = 7.48868e17
-    clad_dict['Cr-50'] = 3.29620e18
-    clad_dict['Cr-52'] = 6.35639e19
-    clad_dict['Cr-53'] = 7.20763e18
-    clad_dict['Cr-54'] = 1.79413e18
-    clad_dict['Fe-54'] = 5.57350e18
-    clad_dict['Fe-56'] = 8.74921e19
-    clad_dict['Fe-57'] = 2.02057e18
-    clad_dict['Fe-58'] = 2.68901e17
-    clad_dict['Cr-50'] = 3.29620e18
-    clad_dict['Cr-52'] = 6.35639e19
-    clad_dict['Cr-53'] = 7.20763e18
-    clad_dict['Cr-54'] = 1.79413e18
-    clad_dict['Ni-58'] = 2.51631e19
-    clad_dict['Ni-60'] = 9.69278e18
-    clad_dict['Ni-61'] = 4.21338e17
-    clad_dict['Ni-62'] = 1.34341e18
-    clad_dict['Ni-64'] = 3.43127e17
-    clad_dict['Zr-90'] = 2.18320e22
-    clad_dict['Zr-91'] = 4.76104e21
-    clad_dict['Zr-92'] = 7.27734e21
-    clad_dict['Zr-94'] = 7.37494e21
-    clad_dict['Zr-96'] = 1.18814e21
-    clad_dict['Sn-112'] = 4.67352e18
-    clad_dict['Sn-114'] = 3.17992e18
-    clad_dict['Sn-115'] = 1.63814e18
-    clad_dict['Sn-116'] = 7.00546e19
-    clad_dict['Sn-117'] = 3.70027e19
-    clad_dict['Sn-118'] = 1.16694e20
-    clad_dict['Sn-119'] = 4.13872e19
-    clad_dict['Sn-120'] = 1.56973e20
-    clad_dict['Sn-122'] = 2.23076e19
-    clad_dict['Sn-124'] = 2.78966e19
+    clad_dict['O16'] = 3.07427e20
+    clad_dict['O17'] = 7.48868e17
+    clad_dict['Cr50'] = 3.29620e18
+    clad_dict['Cr52'] = 6.35639e19
+    clad_dict['Cr53'] = 7.20763e18
+    clad_dict['Cr54'] = 1.79413e18
+    clad_dict['Fe54'] = 5.57350e18
+    clad_dict['Fe56'] = 8.74921e19
+    clad_dict['Fe57'] = 2.02057e18
+    clad_dict['Fe58'] = 2.68901e17
+    clad_dict['Cr50'] = 3.29620e18
+    clad_dict['Cr52'] = 6.35639e19
+    clad_dict['Cr53'] = 7.20763e18
+    clad_dict['Cr54'] = 1.79413e18
+    clad_dict['Ni58'] = 2.51631e19
+    clad_dict['Ni60'] = 9.69278e18
+    clad_dict['Ni61'] = 4.21338e17
+    clad_dict['Ni62'] = 1.34341e18
+    clad_dict['Ni64'] = 3.43127e17
+    clad_dict['Zr90'] = 2.18320e22
+    clad_dict['Zr91'] = 4.76104e21
+    clad_dict['Zr92'] = 7.27734e21
+    clad_dict['Zr94'] = 7.37494e21
+    clad_dict['Zr96'] = 1.18814e21
+    clad_dict['Sn112'] = 4.67352e18
+    clad_dict['Sn114'] = 3.17992e18
+    clad_dict['Sn115'] = 1.63814e18
+    clad_dict['Sn116'] = 7.00546e19
+    clad_dict['Sn117'] = 3.70027e19
+    clad_dict['Sn118'] = 1.16694e20
+    clad_dict['Sn119'] = 4.13872e19
+    clad_dict['Sn120'] = 1.56973e20
+    clad_dict['Sn122'] = 2.23076e19
+    clad_dict['Sn124'] = 2.78966e19
 
     # Gap concentration
     # Funny enough, the example problem uses air.
     gap_dict = OrderedDict()
-    gap_dict['O-16'] = 7.86548e18
-    gap_dict['O-17'] = 2.99548e15
-    gap_dict['N-14'] = 3.38646e19
-    gap_dict['N-15'] = 1.23717e17
+    gap_dict['O16'] = 7.86548e18
+    gap_dict['O17'] = 2.99548e15
+    gap_dict['N14'] = 3.38646e19
+    gap_dict['N15'] = 1.23717e17
 
     # Concentration to be used for coolant
     # No boron
     cool_dict = OrderedDict()
-    cool_dict['H-1'] = 4.68063e22
-    cool_dict['O-16'] = 2.33427e22
-    cool_dict['O-17'] = 8.89086e18
+    cool_dict['H1'] = 4.68063e22
+    cool_dict['O16'] = 2.33427e22
+    cool_dict['O17'] = 8.89086e18
 
     # Store these dictionaries in the initial conditions dictionary
     initial_density = OrderedDict()
@@ -116,15 +116,15 @@ def generate_initial_number_density():
     MCNP = False
 
     if MCNP:
-        library['fuel_gd'] = '82c'
-        library['fuel'] = '82c'
+        library['fuel_gd'] = '712nc'
+        library['fuel'] = '712nc'
         # We approximate temperature of everything as 600K, even though it was
         # actually 580K.
-        library['gap'] = '81c'
-        library['clad'] = '81c'
-        library['cool'] = '81c'
+        library['gap'] = '711nc'
+        library['clad'] = '711nc'
+        library['cool'] = '711nc'
 
-        sab['cool'] = 'lwtr'
+        sab['cool'] = 'c_H_in_H2O'
 
         library_sab['cool'] = '26t'
     else:
@@ -134,7 +134,7 @@ def generate_initial_number_density():
         library['clad'] = '71c'
         library['cool'] = '71c'
 
-        sab['cool'] = 'HH2O'
+        sab['cool'] = 'c_H_in_H2O'
 
         library_sab['cool'] = '71t'
 
@@ -285,6 +285,5 @@ def generate_geometry():
     root.add_cells([cool_cell] + clad_cell + gap_cell + fuel_cell +
                    gd_fuel_cell + [gd_fuel_clad] + [gd_fuel_gap])
 
-    geometry = openmc.Geometry()
-    geometry.root_universe = root
+    geometry = openmc.Geometry(root)
     return geometry, volume

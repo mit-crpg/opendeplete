@@ -662,16 +662,17 @@ class Geometry:
         self.burn_nuc_to_ind = OrderedDict()
         nuc_ind = 0
 
-        for nuclide_node in root.findall('ace_table'):
-            name = nuclide_node.get('alias')
-            if not name:
+        for nuclide_node in root.findall('library'):
+            mats = nuclide_node.get('materials')
+            if not mats:
                 continue
-            name_parts = name.split(".")
+            for name in mats.split():
+                name_parts = name.split(".")
 
-            # Make a burn list of the union of nuclides in cross_sections.xml
-            # and nuclides in depletion chain.
-            if name_parts[0] not in self.participating_nuclides:
-                self.participating_nuclides.add(name_parts[0])
-                if name_parts[0] in self.chain.nuclide_dict:
-                    self.burn_nuc_to_ind[name_parts[0]] = nuc_ind
-                    nuc_ind += 1
+                # Make a burn list of the union of nuclides in cross_sections.xml
+                # and nuclides in depletion chain.
+                if name_parts[0] not in self.participating_nuclides:
+                    self.participating_nuclides.add(name_parts[0])
+                    if name_parts[0] in self.chain.nuclide_dict:
+                        self.burn_nuc_to_ind[name_parts[0]] = nuc_ind
+                        nuc_ind += 1
