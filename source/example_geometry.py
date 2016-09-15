@@ -108,35 +108,28 @@ def generate_initial_number_density():
     initial_density['cool'] = cool_dict
 
     # Set up libraries to use
-    library = OrderedDict()
-    library_sab = OrderedDict()
+    temperature = OrderedDict()
     sab = OrderedDict()
 
     # Toggle betweeen MCNP and NNDC data
     MCNP = False
 
     if MCNP:
-        library['fuel_gd'] = '712nc'
-        library['fuel'] = '712nc'
+        temperature['fuel_gd'] = 900.0
+        temperature['fuel'] = 900.0
         # We approximate temperature of everything as 600K, even though it was
         # actually 580K.
-        library['gap'] = '711nc'
-        library['clad'] = '711nc'
-        library['cool'] = '711nc'
-
-        sab['cool'] = 'c_H_in_H2O'
-
-        library_sab['cool'] = '26t'
+        temperature['gap'] = 600.0
+        temperature['clad'] = 600.0
+        temperature['cool'] = 600.0
     else:
-        library['fuel_gd'] = '71c'
-        library['fuel'] = '71c'
-        library['gap'] = '71c'
-        library['clad'] = '71c'
-        library['cool'] = '71c'
+        temperature['fuel_gd'] = 293.6
+        temperature['fuel'] = 293.6
+        temperature['gap'] = 293.6
+        temperature['clad'] = 293.6
+        temperature['cool'] = 293.6
 
-        sab['cool'] = 'c_H_in_H2O'
-
-        library_sab['cool'] = '71t'
+    sab['cool'] = 'c_H_in_H2O'
 
     # Set up burnable materials
     burn = OrderedDict()
@@ -147,8 +140,7 @@ def generate_initial_number_density():
     burn['cool'] = False
 
     materials = openmc_wrapper.Materials()
-    materials.library = library
-    materials.library_sab = library_sab
+    materials.temperature = temperature
     materials.sab = sab
     materials.initial_density = initial_density
     materials.burn = burn
