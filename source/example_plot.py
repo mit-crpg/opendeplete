@@ -26,14 +26,14 @@ t_ref *= 3600 * 24 * 30 / 1.022  # Convert from MWd-kgHM to seconds
 # Set variables for where the data is, and what we want to read out.
 result_folder = folder + "test"
 cells = [10000, 10001, 10002, 10003, 10004]
-nuclides = ['Xe-135', 'U-235', 'Gd-157']
+nuclides = ['Xe135', 'U235', 'Gd157']
 
 # Load data
 x, y = utilities.get_atoms_volaveraged(result_folder, cells, nuclides)
 
 
-plt.semilogy(x, y['Gd-157'])
+plt.semilogy(x, y['Gd157'])
 plt.semilogy(t_ref, gd_ref)
 plt.legend(('MCNP', 'Ref'), loc='best')
 plt.show()
-print(y['Gd-157'])
+print(y['Gd157'])
