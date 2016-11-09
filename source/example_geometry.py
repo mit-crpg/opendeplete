@@ -5,11 +5,15 @@ Gd-157 2 wt-percent enriched.  The geometry is reflected, with reflections
 going through the center of the Gd-157 pin.  Said pin is split into 5 rings.
 """
 
-import function
-import openmc
-import openmc_wrapper
-import numpy as np
 from collections import OrderedDict
+import math
+import os
+
+import numpy as np
+import openmc
+
+import function
+import openmc_wrapper
 
 
 def generate_initial_number_density():
@@ -144,6 +148,7 @@ def generate_initial_number_density():
     materials.sab = sab
     materials.initial_density = initial_density
     materials.burn = burn
+    materials.cross_sections = os.environ["OPENMC_CROSS_SECTIONS"]
 
     return materials
 
@@ -160,9 +165,6 @@ def generate_geometry():
     volume. Further, by naming cells the same as the above materials, the code
     can automatically handle the mapping.
     """
-
-    import math
-    import numpy as np
 
     pitch = 1.26197
     r_fuel = 0.412275

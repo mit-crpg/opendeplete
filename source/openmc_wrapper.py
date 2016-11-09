@@ -23,8 +23,6 @@ class Settings:
 
     Attributes
     ----------
-    cross_sections : str
-        Path to cross_sections.xml.
     chain_file : str
         Path to the depletion chain xml file.
     openmc_call : List[str]
@@ -47,7 +45,6 @@ class Settings:
 
     def __init__(self):
         # OpenMC specific
-        self.cross_sections = None
         self.chain_file = None
         self.openmc_call = None
         self.particles = None
@@ -74,6 +71,8 @@ class Materials:
     temperature : OrderedDict[str]
         Temperature in Kelvin for each region.  Indexed as temperature[name
         of region : float].
+    cross_sections : str
+        Path to cross_sections.xml file.
     sab : OrderedDict[str]
         ENDF S(a,b) name for a region that needs S(a,b) data.  Indexed as
         sab[name of region : str].  Not set if no S(a,b) needed for region.
@@ -85,6 +84,7 @@ class Materials:
     def __init__(self):
         self.initial_density = None
         self.temperature = None
+        self.cross_sections = None
         self.sab = None
         self.burn = None
 
@@ -194,7 +194,7 @@ class Geometry:
         self.geometry.export_to_xml()
 
         # Load participating nuclides
-        self.load_participating(settings.cross_sections)
+        self.load_participating(self.materials.cross_sections)
 
         # Create reaction rate tables
         self.reaction_rates = \
@@ -300,6 +300,7 @@ class Geometry:
             materials.append(mat)
 
         materials_file = openmc.Materials(materials)
+        materials_file.cross_sections = self.materials.cross_sections
         materials_file.export_to_xml()
 
     def generate_settings_xml(self, settings):
