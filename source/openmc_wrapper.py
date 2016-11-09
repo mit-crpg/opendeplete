@@ -357,7 +357,7 @@ class Geometry:
         # ----------------------------------------------------------------------
         # Create tallies for depleting regions
         tally_ind = 1
-        cell_filter_dep = openmc.Filter(type='cell', bins=self.burn_list)
+        cell_filter_dep = openmc.CellFilter(self.burn_list)
         tallies_file = openmc.Tallies()
 
         nuc_superset = set()
