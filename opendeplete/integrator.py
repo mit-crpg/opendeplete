@@ -14,7 +14,7 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
-from results import write_results
+from .results import write_results
 
 
 def predictor(operator):

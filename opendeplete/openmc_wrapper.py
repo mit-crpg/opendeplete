@@ -16,8 +16,8 @@ import numpy as np
 import openmc
 from openmc.stats import Box
 
-import reaction_rates
-import depletion_chain
+from .depletion_chain import matrix_wrapper
+from .reaction_rates import ReactionRates
 
 
 class Settings:
@@ -218,10 +218,10 @@ class Geometry:
         self.load_participating(self.materials.cross_sections)
 
         # Create reaction rate tables
-        self.reaction_rates = \
-            reaction_rates.ReactionRates(self.burn_mat_to_ind,
-                                         self.burn_nuc_to_ind,
-                                         self.chain.react_to_ind)
+        self.reaction_rates = ReactionRates(
+            self.burn_mat_to_ind,
+            self.burn_nuc_to_ind,
+            self.chain.react_to_ind)
 
         # Finally, calculate total number densities
         self.total_number = OrderedDict()
@@ -428,7 +428,7 @@ class Geometry:
             input_list.append((self.chain, self.reaction_rates, mat_ind))
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(depletion_chain.matrix_wrapper, input_list)
+            matrices = executor.map(matrix_wrapper, input_list)
 
         return list(matrices)
 

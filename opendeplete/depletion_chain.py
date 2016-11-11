@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import scipy.sparse as sp
 
-import nuclide
+from .nuclide import Nuclide, Yield
 
 
 class DepletionChain:
@@ -76,7 +76,7 @@ class DepletionChain:
 
         for nuclide_index, nuclide_node in enumerate(
                 decay_node.findall('nuclide_table')):
-            nuc = nuclide.Nuclide()
+            nuc = Nuclide()
 
             # Just set it to zero to ensure it's set
             nuc.yield_ind = 0
@@ -119,7 +119,7 @@ class DepletionChain:
         # Read neutron induced fission yields table
         nfy_node = root.find('neutron_fission_yields')
 
-        self.yields = nuclide.Yield()
+        self.yields = Yield()
 
         # Create and load all the variables
         n_fis_prod = int(nfy_node.find('nuclides').text)

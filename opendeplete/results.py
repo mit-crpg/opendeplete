@@ -6,8 +6,8 @@ Contains results generation and saving capabilities.
 import lzma
 import pickle
 
-import reaction_rates
-import concentrations
+from .concentrations import Concentrations
+from .reaction_rates import ReactionRates
 
 
 class Results:
@@ -64,7 +64,7 @@ class Results:
             op.set_density(vec)
 
             # op.total_number is already in the right format:
-            concentration = concentrations.Concentrations()
+            concentration = Concentrations()
             concentration.convert_nested_dict(op.total_number)
             self.num.append(concentration)
 
@@ -104,9 +104,9 @@ def merge_results(rates_array, weights_array):
     """
 
     # First, create an empty rate object
-    r_bar = reaction_rates.ReactionRates(rates_array[0].cell_to_ind,
-                                         rates_array[0].nuc_to_ind,
-                                         rates_array[0].react_to_ind)
+    r_bar = ReactionRates(rates_array[0].cell_to_ind,
+                          rates_array[0].nuc_to_ind,
+                          rates_array[0].react_to_ind)
 
     # Then, merge results
     for weight_i, rates_i in zip(weights_array, rates_array):
