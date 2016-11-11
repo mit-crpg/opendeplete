@@ -11,7 +11,7 @@ import os
 import numpy as np
 import openmc
 
-import openmc_wrapper
+from opendeplete import Materials, density_to_mat
 
 
 def generate_initial_number_density():
@@ -141,7 +141,7 @@ def generate_initial_number_density():
     burn['clad'] = False
     burn['cool'] = False
 
-    materials = openmc_wrapper.Materials()
+    materials = Materials()
     materials.temperature = temperature
     materials.sab = sab
     materials.initial_density = initial_density
@@ -328,13 +328,13 @@ def generate_problem():
     for cell_id in cells:
         cell = cells[cell_id]
         if cell.name == 'fuel':
-            omc_mats = [openmc_wrapper.density_to_mat(materials.initial_density[cell_type])
+            omc_mats = [density_to_mat(materials.initial_density[cell_type])
                         for cell_type in mapping]
             cell.fill = omc_mats
             for mat in omc_mats:
                 vol_dict[mat.id] = volume['fuel']
         elif cell.name != '':
-            omc_mat = openmc_wrapper.density_to_mat(materials.initial_density[cell.name])
+            omc_mat = density_to_mat(materials.initial_density[cell.name])
             cell.fill = omc_mat
             vol_dict[omc_mat.id] = volume[cell.name]
 
