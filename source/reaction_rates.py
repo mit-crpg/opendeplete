@@ -75,7 +75,7 @@ class ReactionRates:
         if isinstance(nuc, str):
             nuc_id = self.nuc_to_ind[nuc]
         else:
-            nuc_id = cell
+            nuc_id = nuc
         if isinstance(react, str):
             react_id = self.react_to_ind[react]
         else:
@@ -105,7 +105,7 @@ class ReactionRates:
         if isinstance(nuc, str):
             nuc_id = self.nuc_to_ind[nuc]
         else:
-            nuc_id = cell
+            nuc_id = nuc
         if isinstance(react, str):
             react_id = self.react_to_ind[react]
         else:

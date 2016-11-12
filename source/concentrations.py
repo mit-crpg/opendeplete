@@ -21,7 +21,7 @@ class Concentrations:
         Number of cells.
     n_nuc : int
         Number of nucs.
-    rates : np.array
+    number : np.array
         Array storing rates indexed by the above dictionaries.
     """
 
@@ -90,7 +90,7 @@ class Concentrations:
 
         Parameters
         ----------
-        pos : Tuple
+        pos : tuple
             A two-length tuple containing a cell index and a nuc index.  These
             indexes can be strings (which get converted to integers via the
             dictionaries), integers used directly, or slices.
@@ -109,7 +109,7 @@ class Concentrations:
         if isinstance(nuc, str):
             nuc_id = self.nuc_to_ind[nuc]
         else:
-            nuc_id = cell
+            nuc_id = nuc
 
         return self.number[cell_id, nuc_id]
 
@@ -118,7 +118,7 @@ class Concentrations:
 
         Parameters
         ----------
-        pos : Tuple
+        pos : tuple
             A two-length tuple containing a cell index and a nuc index.  These
             indexes can be strings (which get converted to integers via the
             dictionaries), integers used directly, or slices.
@@ -134,6 +134,6 @@ class Concentrations:
         if isinstance(nuc, str):
             nuc_id = self.nuc_to_ind[nuc]
         else:
-            nuc_id = cell
+            nuc_id = nuc
 
         self.number[cell_id, nuc_id] = val
