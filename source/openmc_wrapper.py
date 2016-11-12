@@ -291,7 +291,8 @@ class Geometry:
             for key_nuc in self.number_density[key_mat]:
                 # Check if in participating nuclides
                 if key_nuc in self.participating_nuclides:
-                    mat.add_nuclide(key_nuc, self.number_density[key_mat][key_nuc])
+                    mat.add_nuclide(key_nuc, 1.0e-24*self.number_density[
+                        key_mat][key_nuc])
             mat.set_density(units='sum')
 
             if mat_name in self.materials.sab:
@@ -430,7 +431,7 @@ class Geometry:
 
         mat = openmc.Material(material_id=m_id)
         for key in self.number_density[m_id]:
-            mat.add_nuclide(key, self.number_density[m_id][key])
+            mat.add_nuclide(key, 1.0e-24*self.number_density[m_id][key])
         mat.set_density('sum')
 
         return mat
