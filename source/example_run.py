@@ -1,5 +1,6 @@
 """An example file showing how to run a simulation."""
 
+import os
 import function
 import numpy as np
 import pickle
@@ -21,10 +22,8 @@ dt = np.repeat([dt1], N)
 # Create settings variable
 settings = openmc_wrapper.Settings()
 
-settings.cross_sections = \
-    "/home/cjosey/code/openmc/data/nndc/cross_sections.xml"
-settings.chain_file = "/home/cjosey/code/opendeplete/chains/chain_simple.xml"
-settings.openmc_call = "/home/cjosey/code/openmc/bin/openmc"
+settings.chain_file = "../chains/chain_simple.xml"
+settings.openmc_call = "openmc"
 # An example for mpiexec:
 # settings.openmc_call = ["mpiexec", "/home/cjosey/code/openmc/bin/openmc"]
 settings.particles = 1000

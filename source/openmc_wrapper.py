@@ -23,8 +23,6 @@ class Settings:
 
     Attributes
     ----------
-    cross_sections : str
-        Path to cross_sections.xml.
     chain_file : str
         Path to the depletion chain xml file.
     openmc_call : List[str]
@@ -47,7 +45,6 @@ class Settings:
 
     def __init__(self):
         # OpenMC specific
-        self.cross_sections = None
         self.chain_file = None
         self.openmc_call = None
         self.particles = None
@@ -61,7 +58,7 @@ class Settings:
 
 
 class Materials:
-    """ The Materials class.
+    """The Materials class.
 
     This contains dictionaries indicating which cells are to be filled with
     what number of atoms and what libraries.
@@ -71,25 +68,24 @@ class Materials:
     inital_density : OrderedDict[OrderedDict[float]]
         Initial density of the simulation.  Indexed as
         initial_density[name of region : str][name of nuclide : str].
-    library : OrderedDict[str]
-        ENDF tag for the library data (e.g. '71c').  Indexed as
-        library[name of region : str].
+    temperature : OrderedDict[str]
+        Temperature in Kelvin for each region.  Indexed as temperature[name
+        of region : float].
+    cross_sections : str
+        Path to cross_sections.xml file.
     sab : OrderedDict[str]
         ENDF S(a,b) name for a region that needs S(a,b) data.  Indexed as
         sab[name of region : str].  Not set if no S(a,b) needed for region.
-    library_sab : OrderedDict[str]
-        ENDF tag for the S(a,b) data (e.g. '15t').  Indexed as
-        library_sab[name of region : str].  Not set if no S(a,b) needed for
-        region.
     burn : OrderedDict[bool]
         burn[name of region : str] = True if region needs to be in burn.
+
     """
 
     def __init__(self):
         self.initial_density = None
-        self.library = None
+        self.temperature = None
+        self.cross_sections = None
         self.sab = None
-        self.library_sab = None
         self.burn = None
 
 
@@ -198,7 +194,7 @@ class Geometry:
         self.geometry.export_to_xml()
 
         # Load participating nuclides
-        self.load_participating(settings.cross_sections)
+        self.load_participating(self.materials.cross_sections)
 
         # Create reaction rate tables
         self.reaction_rates = \
@@ -284,33 +280,28 @@ class Geometry:
         """
         openmc.reset_auto_material_id()
 
-        mat = []
-        i = 0
+        materials = []
 
         for key_mat in self.number_density:
-            mat.append(openmc.Material(material_id=key_mat))
+            mat = openmc.Material(material_id=key_mat)
 
             mat_name = self.mat_name[key_mat]
+            mat.temperature = self.materials.temperature[mat_name]
 
-            total = 0.0
             for key_nuc in self.number_density[key_mat]:
                 # Check if in participating nuclides
                 if key_nuc in self.participating_nuclides:
-                    nuc = openmc.Nuclide(key_nuc,
-                                         xs=self.materials.library[mat_name])
-                    mat[i].add_nuclide(nuc,
-                                       self.number_density[key_mat][key_nuc])
-                    total += self.number_density[key_mat][key_nuc]
-            mat[i].set_density('atom/cm3', total)
+                    mat.add_nuclide(key_nuc, 1.0e-24*self.number_density[
+                        key_mat][key_nuc])
+            mat.set_density(units='sum')
 
             if mat_name in self.materials.sab:
-                mat[i].add_s_alpha_beta(self.materials.sab[mat_name],
-                                        self.materials.library_sab[mat_name])
+                mat.add_s_alpha_beta(self.materials.sab[mat_name])
 
-            i += 1
+            materials.append(mat)
 
-        materials_file = openmc.Materials()
-        materials_file.add_materials(mat)
+        materials_file = openmc.Materials(materials)
+        materials_file.cross_sections = self.materials.cross_sections
         materials_file.export_to_xml()
 
     def generate_settings_xml(self, settings):
@@ -330,7 +321,6 @@ class Geometry:
         """
         import random
         import sys
-        from openmc.source import Source
         from openmc.stats import Box
         pitch = 1.26197
 
@@ -343,8 +333,8 @@ class Geometry:
         settings_file.batches = batches
         settings_file.inactive = inactive
         settings_file.particles = particles
-        settings_file.source = Source(space=Box([-0.0, -0.0, -1],
-                                                [3/2*pitch, 3/2*pitch, 1]))
+        settings_file.source = openmc.Source(space=Box([-0.0, -0.0, -1],
+                                                       [3/2*pitch, 3/2*pitch, 1]))
         settings_file.entropy_lower_left = [-0.0, -0.0, -1.e50]
         settings_file.entropy_upper_right = [3/2*pitch, 3/2*pitch, 1.e50]
         settings_file.entropy_dimension = [10, 10, 1]
@@ -368,7 +358,7 @@ class Geometry:
         # ----------------------------------------------------------------------
         # Create tallies for depleting regions
         tally_ind = 1
-        cell_filter_dep = openmc.Filter(type='cell', bins=self.burn_list)
+        cell_filter_dep = openmc.CellFilter(self.burn_list)
         tallies_file = openmc.Tallies()
 
         nuc_superset = set()
@@ -440,12 +430,9 @@ class Geometry:
         """
 
         mat = openmc.Material(material_id=m_id)
-        total = 0.0
         for key in self.number_density[m_id]:
-            nuc = openmc.Nuclide(key)
-            mat.add_nuclide(nuc, self.number_density[m_id][key])
-            total += self.number_density[m_id][key]
-        mat.set_density('atom/cm3', total)
+            mat.add_nuclide(key, 1.0e-24*self.number_density[m_id][key])
+        mat.set_density('sum')
 
         return mat
 
@@ -482,9 +469,7 @@ class Geometry:
 
         total_density = []
 
-        cell_i = 0
-
-        for cell in self.burn_list:
+        for cell_i, cell in enumerate(self.burn_list):
 
             total_density.append([])
 
@@ -498,7 +483,6 @@ class Geometry:
                     total_density[cell_i].append(0.0)
             # Convert to np.array
             total_density[cell_i] = np.array(total_density[cell_i])
-            cell_i += 1
 
         return total_density
 
@@ -519,15 +503,13 @@ class Geometry:
             order of vectors and matrices is self.burn_list's order.
         """
 
-        cell_i = 0
-
         # First, ensure self.total_number is clear
         for cell in self.burn_list:
             for i in range(len(self.chain.nuclides)):
                 if self.chain.nuclides[i].name in self.total_number[cell]:
                     self.total_number[cell].pop(self.chain.nuclides[i].name, None)
 
-        for cell in self.burn_list:
+        for cell_i, cell in enumerate(self.burn_list):
 
             # Update total_number first
             for i in range(len(self.chain.nuclides)):
@@ -540,8 +522,6 @@ class Geometry:
                         self.total_number[cell][nuc] = total_density[cell_i][i]
                     else:
                         self.total_number[cell][nuc] = 1.0e5
-
-            cell_i += 1
 
             # Then update number_density
             for nuc in self.total_number[cell]:
@@ -572,13 +552,7 @@ class Geometry:
         ----
             Provide units for new_power
         """
-        import openmc.statepoint as sp
-
-        statepoint = sp.StatePoint(filename)
-
-        # Link with summary file so that cell IDs work.
-        su = openmc.Summary('summary.h5')
-        statepoint.link_with_summary(su)
+        statepoint = openmc.StatePoint(filename)
 
         k = statepoint.k_combined[0]
 
@@ -662,16 +636,15 @@ class Geometry:
         self.burn_nuc_to_ind = OrderedDict()
         nuc_ind = 0
 
-        for nuclide_node in root.findall('ace_table'):
-            name = nuclide_node.get('alias')
-            if not name:
+        for nuclide_node in root.findall('library'):
+            mats = nuclide_node.get('materials')
+            if not mats:
                 continue
-            name_parts = name.split(".")
-
-            # Make a burn list of the union of nuclides in cross_sections.xml
-            # and nuclides in depletion chain.
-            if name_parts[0] not in self.participating_nuclides:
-                self.participating_nuclides.add(name_parts[0])
-                if name_parts[0] in self.chain.nuclide_dict:
-                    self.burn_nuc_to_ind[name_parts[0]] = nuc_ind
-                    nuc_ind += 1
+            for name in mats.split():
+                # Make a burn list of the union of nuclides in cross_sections.xml
+                # and nuclides in depletion chain.
+                if name not in self.participating_nuclides:
+                    self.participating_nuclides.add(name)
+                    if name in self.chain.nuclide_dict:
+                        self.burn_nuc_to_ind[name] = nuc_ind
+                        nuc_ind += 1
