@@ -31,7 +31,7 @@ class DepletionChain:
         Maps a nuclide name to an index in yields.fis_yield_data
     yields : nuclide.Yield
         Yield object for fission.
-    reaction_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict[int]
         Dictionary mapping a reaction name to an index in ReactionRates.
     """
 
