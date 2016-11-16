@@ -28871,7 +28871,7 @@
   <neutron_fission_yields>
     <nuclides>3374</nuclides>
     <precursor>22</precursor>
-    <precursor_name>U234 U-235 U-236 U-237 U-238 U-239 U-240 Np-234 Np-235 Np-236 Np-237 Np-238 Np-239 Pu-236 Pu-237 Pu-238 Pu-239 Pu-240 Pu-241 Pu-242 Pu-243 Pu-244</precursor_name>
+    <precursor_name>U234 U235 U236 U237 U238 U239 U240 Np234 Np235 Np236 Np237 Np238 Np239 Pu236 Pu237 Pu238 Pu239 Pu240 Pu241 Pu242 Pu243 Pu244</precursor_name>
     <energy>2.53000E02</energy>
     <energy_points>1</energy_points>
     <nuclide_table name="H1">
