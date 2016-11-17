@@ -9,8 +9,7 @@ import example_geometry
 import integrator
 
 # Load geometry from example
-geometry, volume = example_geometry.generate_geometry()
-materials = example_geometry.generate_initial_number_density()
+geometry, volume, materials = example_geometry.generate_problem()
 
 # Create dt vector for 5.5 months with 15 day timesteps
 dt1 = 15*24*60*60  # 15 days
@@ -30,7 +29,7 @@ settings.particles = 1000
 settings.batches = 100
 settings.inactive = 40
 
-settings.power = 2.337e15  # MeV/second cm from CASMO
+settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 

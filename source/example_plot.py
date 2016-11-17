@@ -26,6 +26,7 @@ t_ref *= 3600 * 24 * 30 / 1.022  # Convert from MWd-kgHM to seconds
 # Set variables for where the data is, and what we want to read out.
 result_folder = folder + "test"
 cells = [10000, 10001, 10002, 10003, 10004]
+cells = [x for x in range(10004,10000+9*8*5,9)]
 nuclides = ['Xe135', 'U235', 'Gd157']
 
 # Load data
