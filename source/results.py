@@ -3,10 +3,11 @@
 Contains results generation and saving capabilities.
 """
 
-import reaction_rates
-import concentrations
 import lzma
 import pickle
+
+import reaction_rates
+import concentrations
 
 
 class Results:
@@ -52,7 +53,6 @@ class Results:
     """
 
     def __init__(self, op, eigvl, d_vec, rates, weights, seeds, time):
-        import copy
         # Fills a new Results array with data from geometry
         self.k = eigvl
 
@@ -115,12 +115,12 @@ def merge_results(rates_array, weights_array):
     return r_bar
 
 
-def write_results(op, eigvl, d_vec, rates, weights, seeds, time, ind):
+def write_results(operator, eigvl, d_vec, rates, weights, seeds, time, ind):
     """ Outputs results to a .pkl file.
 
     Parameters
     ----------
-    op : function.Operator
+    operator : function.Operator
         The operator used to generate these results.
     eigvl : float
         The eigenvalue of the problem.
@@ -140,7 +140,7 @@ def write_results(op, eigvl, d_vec, rates, weights, seeds, time, ind):
     """
 
     # Create results
-    res = Results(op, eigvl, d_vec, rates, weights, seeds, time)
+    res = Results(operator, eigvl, d_vec, rates, weights, seeds, time)
 
     # Pickle results
     output = lzma.open('step' + str(ind) + '.pklz', 'wb')

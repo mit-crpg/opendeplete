@@ -3,15 +3,16 @@
 This module implements the OpenDeplete -> OpenMC linkage.
 """
 
-import openmc
 import os
 import time
-import reaction_rates
 from subprocess import call
-from results import *
 from collections import OrderedDict
-import depletion_chain
+
 import numpy as np
+
+import openmc
+import reaction_rates
+import depletion_chain
 
 
 class Settings:
@@ -95,12 +96,21 @@ class Geometry:
     Contains all geometry- and materials-related components necessary for
     depletion.
 
+    Parameters
+    ----------
+    geometry : openmc.Geometry
+        The OpenMC geometry object.
+    volume : OrderedDict[float]
+        Given a material ID, gives the volume of said material.
+    materials : openmc_wrapper.Materials
+        Materials to be used for this simulation.
+
     Attributes
     ----------
     geometry : openmc.Geometry
         The OpenMC geometry object.
     volume : OrderedDict[float]
-        Given a cell ID, gives the volume of said cell.
+        Given a material ID, gives the volume of said material.
     materials : openmc_wrapper.Materials
         Materials to be used for this simulation.
     seed : int
@@ -130,23 +140,23 @@ class Geometry:
         reaction_rates.
     """
 
-    def __init__(self):
-        self.geometry = None
-        self.volume = None
-        self.materials = None
-        self.seed = None
-        self.number_density = None
+    def __init__(self, geometry, volume, materials):
+        self.geometry = geometry
+        self.volume = volume
+        self.materials = materials
+        self.seed = 0
+        self.number_density = OrderedDict()
         self.total_number = None
         self.participating_nuclides = None
-        self.burn_list = None
+        self.burn_list = []
         self.chain = None
         self.reaction_rates = None
         self.power = None
-        self.mat_name = None
-        self.burn_mat_to_ind = None
+        self.mat_name = OrderedDict()
+        self.burn_mat_to_ind = OrderedDict()
         self.burn_nuc_to_ind = None
 
-    def initialize(self, settings):
+    def initialize(self):
         """ Initializes the geometry.
 
         After geometry, volume, and materials are set, this function completes
@@ -158,18 +168,11 @@ class Geometry:
             Settings to initialize with.
         """
 
-        import copy
-
         # Clear out OpenMC
         openmc.reset_auto_material_id()
         openmc.reset_auto_surface_id()
         openmc.reset_auto_cell_id()
         openmc.reset_auto_universe_id()
-
-        self.number_density = OrderedDict()
-        self.mat_name = OrderedDict()
-        self.burn_mat_to_ind = OrderedDict()
-        self.burn_list = []
 
         mat_ind = 0
 
@@ -185,13 +188,13 @@ class Geometry:
 
             number_densities, mat_ids = extract_openmc_materials(cell)
 
-            for i in range(len(mat_ids)):
-                self.number_density[mat_ids[i]] = number_densities[i]
-                self.mat_name[mat_ids[i]] = name
+            for i, mat_id in enumerate(mat_ids):
+                self.number_density[mat_id] = number_densities[i]
+                self.mat_name[mat_id] = name
 
                 if self.materials.burn[name]:
-                    self.burn_list.append(mat_ids[i])
-                    self.burn_mat_to_ind[str(mat_ids[i])] = mat_ind
+                    self.burn_list.append(mat_id)
+                    self.burn_mat_to_ind[str(mat_id)] = mat_ind
                     mat_ind += 1
 
         # Then, write geometry.xml
@@ -240,25 +243,26 @@ class Geometry:
         self.generate_tally_xml()
         self.generate_settings_xml(settings)
 
-        # Run model
-        devnull = open(os.devnull, 'w')
+        time_start = time.time()
 
-        t1 = time.time()
+        # Run model
         call(settings.openmc_call)
+        time_openmc = time.time()
 
         statepoint_name = "statepoint." + str(settings.batches) + ".h5"
 
         # Extract results
-        t2 = time.time()
         k = self.unpack_tallies_and_normalize(statepoint_name, settings.power)
-        t3 = time.time()
+        time_unpack = time.time()
         os.remove(statepoint_name)
-        mat = self.depletion_matrix_list()
-        t4 = time.time()
 
-        print("Time to openmc: ", t2-t1)
-        print("Time to unpack: ", t3-t2)
-        print("Time to matrix: ", t4-t3)
+        # Compute matrices
+        mat = self.depletion_matrix_list()
+        time_matrix = time.time()
+
+        print("Time to openmc: ", time_openmc - time_start)
+        print("Time to unpack: ", time_unpack - time_openmc)
+        print("Time to matrix: ", time_matrix - time_unpack)
 
         return mat, k, self.reaction_rates, self.seed
 
@@ -419,27 +423,6 @@ class Geometry:
 
         return list(matrices)
 
-    def density_dictionary_to_openmc_mat(self, m_id):
-        """ Generates an OpenMC material from a cell ID and self.number_density.
-
-        Parameters
-        ----------
-        m_id : int
-            Cell ID.
-
-        Returns
-        -------
-        openmc.Material
-            The OpenMC material filled with nuclides.
-        """
-
-        mat = openmc.Material(material_id=m_id)
-        for key in self.number_density[m_id]:
-            mat.add_nuclide(key, 1.0e-24*self.number_density[m_id][key])
-        mat.set_density('sum')
-
-        return mat
-
     def calculate_total_number(self):
         """ Calculates the total number of atoms.
 
@@ -521,11 +504,13 @@ class Geometry:
                 if total_density[mat_i][i] != 0.0:
                     nuc = self.chain.nuclides[i].name
                     # Add a "infinitely dilute" quantity if negative
-                    # TODO: DEBUG
-                    if total_density[mat_i][i] > 0.0:
+                    if total_density[mat_i][i] >= 0.0:
                         self.total_number[mat][nuc] = total_density[mat_i][i]
                     else:
                         self.total_number[mat][nuc] = 1.0e5
+                        print("WARNING! Negative Number Densities!")
+                        print("Material id = ", mat_i, " nuclide ", nuc,
+                              " number = ", total_density[mat_i][i])
 
             # Then update number_density
             for nuc in self.total_number[mat]:
@@ -571,11 +556,11 @@ class Geometry:
         # Zero out reaction_rates
         self.reaction_rates[:, :, :] = 0.0
 
-        df = tally_dep.get_pandas_dataframe()
+        df_tally = tally_dep.get_pandas_dataframe()
         # For each mat to be burned
         for mat_str in self.burn_mat_to_ind:
             mat = int(mat_str)
-            df_mat = df[df["material"] == mat]
+            df_mat = df_tally[df_tally["material"] == mat]
 
             # For each nuclide that was tallied
             for nuc in self.burn_nuc_to_ind:
@@ -694,7 +679,7 @@ def extract_openmc_materials(cell):
     result = []
     mat_id = []
 
-    if type(cell.fill) == openmc.Material:
+    if isinstance(cell.fill, openmc.Material):
         nuc = OrderedDict()
         for nuclide in cell.fill.nuclides:
             name = nuclide[0].name

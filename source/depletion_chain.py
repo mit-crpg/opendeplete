@@ -4,7 +4,13 @@ This module contains information about a depletion chain.  A depletion chain is
 loaded from an .xml file and all the nuclides are linked together.
 """
 
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+import math
+import xml.etree.ElementTree as ET
+
+import numpy as np
+import scipy.sparse as sp
+import nuclide
 
 
 class DepletionChain:
@@ -54,10 +60,6 @@ class DepletionChain:
         ----
             Allow for branching on capture, etc.
         """
-        import xml.etree.ElementTree as ET
-        import code
-        import numpy as np
-        import nuclide
 
         # Create variables
         self.n_nuclides = 0
@@ -155,14 +157,14 @@ class DepletionChain:
         # Form dictionaries out of inverses of lists
         energy_index = 0
 
-        for x in self.yields.energy_list:
-            self.yields.energy_dict[x] = energy_index
+        for precursor in self.yields.energy_list:
+            self.yields.energy_dict[precursor] = energy_index
             energy_index += 1
 
         precursor_index = 0
 
-        for x in self.yields.precursor_list:
-            self.precursor_dict[x] = precursor_index
+        for precursor in self.yields.precursor_list:
+            self.precursor_dict[precursor] = precursor_index
             precursor_index += 1
 
         # Allocate variables
@@ -214,38 +216,34 @@ class DepletionChain:
             Sparse matrix representing depletion.
         """
 
-        import scipy.sparse as sp
-        import math
-        from collections import defaultdict
-
         matrix = defaultdict(lambda: 0)
 
         for i in range(self.n_nuclides):
-            nuclide = self.nuclides[i]
+            nuc = self.nuclides[i]
 
-            if nuclide.n_decay_paths != 0:
+            if nuc.n_decay_paths != 0:
                 # Decay paths
                 # Loss
-                decay_constant = math.log(2)/nuclide.half_life
+                decay_constant = math.log(2)/nuc.half_life
 
                 matrix[(i, i)] -= decay_constant
 
                 # Gain
-                for j in range(nuclide.n_decay_paths):
-                    target_nuclide = nuclide.decay_target[j]
+                for j in range(nuc.n_decay_paths):
+                    target_nuc = nuc.decay_target[j]
 
                     # Allow for total annihilation for debug purposes
-                    if target_nuclide != 'Nothing':
-                        k = self.nuclide_dict[target_nuclide]
+                    if target_nuc != 'Nothing':
+                        k = self.nuclide_dict[target_nuc]
 
                         matrix[(k, i)] += \
-                            nuclide.branching_ratio[j] * decay_constant
+                            nuc.branching_ratio[j] * decay_constant
 
-            if nuclide.name in rates.nuc_to_ind:
+            if nuc.name in rates.nuc_to_ind:
                 # Extract all reactions for this nuclide in this cell
-                nuc_rates = rates[cell_id, nuclide.name, :]
-                for j in range(nuclide.n_reaction_paths):
-                    path = nuclide.reaction_type[j]
+                nuc_rates = rates[cell_id, nuc.name, :]
+                for j in range(nuc.n_reaction_paths):
+                    path = nuc.reaction_type[j]
                     # Extract reaction index, and then final reaction rate
                     r_id = rates.react_to_ind[path]
                     path_rate = nuc_rates[r_id]
@@ -254,15 +252,15 @@ class DepletionChain:
                     matrix[(i, i)] -= path_rate
 
                     # Gain term
-                    target_nuclide = nuclide.reaction_target[j]
+                    target_nuc = nuc.reaction_target[j]
 
                     # Allow for total annihilation for debug purposes
-                    if target_nuclide != 'Nothing':
+                    if target_nuc != 'Nothing':
                         if path != 'fission':
-                            k = self.nuclide_dict[target_nuclide]
+                            k = self.nuclide_dict[target_nuc]
                             matrix[(k, i)] += path_rate
                         else:
-                            m = self.precursor_dict[nuclide.name]
+                            m = self.precursor_dict[nuc.name]
 
                             for k in range(self.yields.n_fis_prod):
                                 l = self.nuclide_dict[self.yields.name[k]]

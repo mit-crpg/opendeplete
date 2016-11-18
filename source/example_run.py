@@ -1,12 +1,12 @@
 """An example file showing how to run a simulation."""
 
-import os
-import function
 import numpy as np
-import pickle
-import openmc_wrapper
+
 import example_geometry
 import integrator
+import function
+import openmc_wrapper
+
 
 # Load geometry from example
 geometry, volume, materials = example_geometry.generate_problem()
@@ -33,8 +33,7 @@ settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 
-op = function.Operator()
-op.initialize(geometry, volume, materials, settings)
+op = function.Operator(geometry, volume, materials, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
-integrator.MCNPX(op)
+integrator.ce_cm(op)

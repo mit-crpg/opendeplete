@@ -11,8 +11,8 @@ import os
 import numpy as np
 import openmc
 
-import function
 import openmc_wrapper
+
 
 def generate_initial_number_density():
     """ Generates initial number density.
@@ -166,22 +166,19 @@ def segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad):
 
     # Compute ring radiuses
     r_rings = np.zeros(n_rings)
-    
+
     for i in range(n_rings):
         r_rings[i] = math.sqrt(1.0/(math.pi) * v_ring * (i+1))
 
     # Compute thetas
     theta = np.linspace(0, 2*math.pi, n_wedges + 1)
 
-    # Form array of cells in fuel pin
-    fuel_pin = []
-
     # Compute surfaces
     fuel_rings = [openmc.ZCylinder(x0=0, y0=0, R=r_rings[i])
-                    for i in range(n_rings)]
+                  for i in range(n_rings)]
 
-    fuel_wedges = [openmc.Plane(A = math.cos(theta[i]), B = math.sin(theta[i]))
-                    for i in range(n_wedges)]
+    fuel_wedges = [openmc.Plane(A=math.cos(theta[i]), B=math.sin(theta[i]))
+                   for i in range(n_wedges)]
 
     gap_ring = openmc.ZCylinder(x0=0, y0=0, R=r_gap)
     clad_ring = openmc.ZCylinder(x0=0, y0=0, R=r_clad)
@@ -202,14 +199,24 @@ def segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad):
                 cell = openmc.Cell(name='fuel')
                 if i == 0:
                     if j != n_wedges-1:
-                        cell.region = -fuel_rings[0] & +fuel_wedges[j] & -fuel_wedges[j+1]
+                        cell.region = (-fuel_rings[0]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[j+1])
                     else:
-                        cell.region = -fuel_rings[0] & +fuel_wedges[j] & -fuel_wedges[0]
+                        cell.region = (-fuel_rings[0]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[0])
                 else:
                     if j != n_wedges-1:
-                        cell.region = +fuel_rings[i-1] & -fuel_rings[i] & +fuel_wedges[j] & -fuel_wedges[j+1]
+                        cell.region = (+fuel_rings[i-1]
+                                       & -fuel_rings[i]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[j+1])
                     else:
-                        cell.region = +fuel_rings[i-1] & -fuel_rings[i] & +fuel_wedges[j] & -fuel_wedges[0]
+                        cell.region = (+fuel_rings[i-1]
+                                       & -fuel_rings[i]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[0])
                 fuel_cells.append(cell)
 
     # Gap ring
@@ -276,20 +283,24 @@ def generate_geometry():
     lattice.outer = all_water_u
 
     # Bound universe
-    x0 = openmc.XPlane(x0=-pitch*n_pin/2, boundary_type='reflective')
-    x1 = openmc.XPlane(x0=pitch*n_pin/2, boundary_type='reflective')
-    y0 = openmc.YPlane(y0=-pitch*n_pin/2, boundary_type='reflective')
-    y1 = openmc.YPlane(y0=pitch*n_pin/2, boundary_type='reflective')
-    z0 = openmc.ZPlane(z0=-10, boundary_type='reflective')
-    z1 = openmc.ZPlane(z0=10, boundary_type='reflective')
+    x_low = openmc.XPlane(x0=-pitch*n_pin/2, boundary_type='reflective')
+    x_high = openmc.XPlane(x0=pitch*n_pin/2, boundary_type='reflective')
+    y_low = openmc.YPlane(y0=-pitch*n_pin/2, boundary_type='reflective')
+    y_high = openmc.YPlane(y0=pitch*n_pin/2, boundary_type='reflective')
+    z_low = openmc.ZPlane(z0=-10, boundary_type='reflective')
+    z_high = openmc.ZPlane(z0=10, boundary_type='reflective')
 
     root_c = openmc.Cell(fill=lattice)
-    root_c.region = +x0 & -x1 & +y0 & -y1 & +z0 & -z1
+    root_c.region = (+x_low & -x_high
+                     & +y_low & -y_high
+                     & +z_low & -z_high)
     root_u = openmc.Universe(universe_id=0, cells=(root_c, ))
     geometry = openmc.Geometry(root_u)
 
+    v_cool = pitch**2 - (v_gap + v_clad + n_rings * n_wedges * v_segment)
+
     # Store volumes for later usage
-    volume = {'fuel': v_segment, 'gap':v_gap, 'clad':v_clad, 'cool':pitch**2 - (v_gap + v_clad + n_rings * n_wedges * v_segment)}
+    volume = {'fuel': v_segment, 'gap':v_gap, 'clad':v_clad, 'cool':v_cool}
 
     return geometry, volume, mapping
 
@@ -313,7 +324,8 @@ def generate_problem():
     for cell_id in cells:
         cell = cells[cell_id]
         if cell.name == 'fuel':
-            omc_mats = [openmc_wrapper.density_to_mat(materials.initial_density[cell_type]) for cell_type in mapping]
+            omc_mats = [openmc_wrapper.density_to_mat(materials.initial_density[cell_type])
+                        for cell_type in mapping]
             cell.fill = omc_mats
             for mat in omc_mats:
                 vol_dict[mat.id] = volume['fuel']

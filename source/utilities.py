@@ -4,13 +4,14 @@ Contains functions that can be used to post-process objects that come out of
 the results module.
 """
 
-import numpy as np
 import os
 import fnmatch
-import pickle
-import results
+
+import numpy as np
 import scipy
 import scipy.stats
+
+import results
 
 
 def get_eigval(directory):
@@ -83,8 +84,7 @@ def get_eigval_average(dir_list):
     # First, calculate how many step files are in each folder
 
     count_list = [0 for directory in dir_list]
-    for i in range(len(dir_list)):
-        directory = dir_list[i]
+    for i, directory in enumerate(dir_list):
         for file in os.listdir(directory):
             if fnmatch.fnmatch(file, 'step*'):
                 count_list[i] += 1
@@ -96,8 +96,7 @@ def get_eigval_average(dir_list):
 
     # Read in file, get eigenvalue, close file
 
-    for i in range(len(dir_list)):
-        directory = dir_list[i]
+    for i, directory in enumerate(dir_list):
         for file in os.listdir(directory):
             if fnmatch.fnmatch(file, 'step*'):
                 # Get ind (files will be found out of order)
@@ -119,11 +118,11 @@ def get_eigval_average(dir_list):
     # Perform statistics on result
     r_stats = scipy.stats.describe(val, axis=1)
 
-    mu = r_stats.mean
+    mu_bar = r_stats.mean
     std_val = np.sqrt(r_stats.variance) / np.sqrt(len(dir_list))
     p_val = [scipy.stats.shapiro(b)[1] for b in val]
 
-    return time, mu, std_val, p_val
+    return time, mu_bar, std_val, p_val
 
 
 def get_atoms(directory, cell_list, nuc_list):
