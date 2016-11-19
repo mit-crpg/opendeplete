@@ -9,7 +9,7 @@ import openmc_wrapper
 
 
 # Load geometry from example
-geometry, volume, materials = example_geometry.generate_problem()
+geometry, volume, materials, lower_left, upper_right = example_geometry.generate_problem()
 
 # Create dt vector for 5.5 months with 15 day timesteps
 dt1 = 15*24*60*60  # 15 days
@@ -28,6 +28,9 @@ settings.openmc_call = "openmc"
 settings.particles = 1000
 settings.batches = 100
 settings.inactive = 40
+settings.lower_left = lower_left
+settings.upper_right = upper_right
+settings.entropy_dimension = [10, 10, 1]
 
 settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt

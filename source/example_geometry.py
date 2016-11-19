@@ -290,6 +290,10 @@ def generate_geometry():
     z_low = openmc.ZPlane(z0=-10, boundary_type='reflective')
     z_high = openmc.ZPlane(z0=10, boundary_type='reflective')
 
+    # Compute bounding box
+    lower_left = [-pitch*n_pin/2, -pitch*n_pin/2, -10]
+    upper_right = [pitch*n_pin/2, pitch*n_pin/2, 10]
+
     root_c = openmc.Cell(fill=lattice)
     root_c.region = (+x_low & -x_high
                      & +y_low & -y_high
@@ -302,7 +306,7 @@ def generate_geometry():
     # Store volumes for later usage
     volume = {'fuel': v_segment, 'gap':v_gap, 'clad':v_clad, 'cool':v_cool}
 
-    return geometry, volume, mapping
+    return geometry, volume, mapping, lower_left, upper_right
 
 def generate_problem():
     """ Merges geometry and materials.
@@ -314,7 +318,7 @@ def generate_problem():
 
     # Get materials dictionary, geometry, and volumes
     materials = generate_initial_number_density()
-    geometry, volume, mapping = generate_geometry()
+    geometry, volume, mapping, lower_left, upper_right = generate_geometry()
 
     # Generate volume dictionary
     vol_dict = OrderedDict()
@@ -334,4 +338,4 @@ def generate_problem():
             cell.fill = omc_mat
             vol_dict[omc_mat.id] = volume[cell.name]
 
-    return geometry, vol_dict, materials
+    return geometry, vol_dict, materials, lower_left, upper_right

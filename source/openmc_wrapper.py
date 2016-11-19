@@ -36,6 +36,12 @@ class Settings:
         Number of batches.
     inactive : int
         Number of inactive batches.
+    lower_left : List[float]
+        Coordinate of lower left of bounding box of geometry.
+    upper_right : List[float]
+        Coordinate of upper right of bounding box of geometry.
+    entropy_dimension : List[int]
+        Grid size of entropy.
     power : float
         Power of the reactor (currently in MeV/second-cm).
     dt_vec : numpy.array
@@ -51,6 +57,9 @@ class Settings:
         self.particles = None
         self.batches = None
         self.inactive = None
+        self.lower_left = None
+        self.upper_right = None
+        self.entropy_dimension = None
 
         # Depletion problem specific
         self.power = None
@@ -330,7 +339,6 @@ class Geometry:
         import random
         import sys
         from openmc.stats import Box
-        pitch = 1.26197
 
         batches = settings.batches
         inactive = settings.inactive
@@ -341,11 +349,11 @@ class Geometry:
         settings_file.batches = batches
         settings_file.inactive = inactive
         settings_file.particles = particles
-        settings_file.source = openmc.Source(space=Box([-0.0, -0.0, -1],
-                                                       [3/2*pitch, 3/2*pitch, 1]))
-        settings_file.entropy_lower_left = [-0.0, -0.0, -1.e50]
-        settings_file.entropy_upper_right = [3/2*pitch, 3/2*pitch, 1.e50]
-        settings_file.entropy_dimension = [10, 10, 1]
+        settings_file.source = openmc.Source(space=Box(settings.lower_left,
+                                                       settings.upper_right))
+        settings_file.entropy_lower_left = settings.lower_left
+        settings_file.entropy_upper_right = settings.upper_right
+        settings_file.entropy_dimension = settings.entropy_dimension
 
         # Set seed
         seed = random.randint(1, sys.maxsize-1)
