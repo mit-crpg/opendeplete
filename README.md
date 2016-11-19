@@ -2,10 +2,9 @@
 OpenDeplete Depletion Front-End
 ===============================
 
-This is a simple depletion front-end tool.  It currently has rudimentary support
-for multiple geometries (all cells must be in root universe), and it only
-supports OpenMC as the neutronics operator.  Long term goals include
-generalization of the geometry and OpenMOC support.
+This is a simple depletion front-end tool.  It currently only supports OpenMC as
+the neutronics operator.  Long term goals include the addition of support for
+other neutronics operators.
 
 ------------
 Installation

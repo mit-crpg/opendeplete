@@ -5,10 +5,7 @@ to run a full depletion simulation.
 """
 
 import depletion_chain
-import reaction_rates
-import openmc
 import openmc_wrapper
-from collections import OrderedDict
 
 
 class Operator:
@@ -16,6 +13,17 @@ class Operator:
 
     This class contains everything the integrator needs to know to perform a
     simulation.
+
+    Parameters
+    ----------
+    geometry : openmc.Geometry
+        The OpenMC geometry object.
+    volume : OrderedDict[float]
+        Given a material ID, gives the volume of said material.
+    materials : openmc_wrapper.Materials
+        Materials to be used for this simulation.
+    settings : openmc_wrapper.Settings
+        Settings object.
 
     Attributes
     ----------
@@ -25,9 +33,16 @@ class Operator:
         Settings object.
     """
 
-    def __init__(self):
-        self.geometry = None
-        self.settings = None
+    def __init__(self, geometry, volume, materials, settings):
+        # Form geometry
+        self.geometry = openmc_wrapper.Geometry(geometry, volume, materials)
+        self.settings = settings
+
+        # Load depletion chain
+        self.load_depletion_data(settings.chain_file)
+
+        # Initialize geometry
+        self.geometry.initialize()
 
     @property
     def chain(self):
@@ -50,36 +65,6 @@ class Operator:
         """
 
         return self.geometry.total_number
-
-    def initialize(self, geo, vol, mat, settings):
-        """ Initializes the Operator.
-
-        Loads all the necessary data into the object for later passing to an
-        integrator function.
-
-        Parameters
-        ----------
-        geo : openmc.Geometry
-            The geometry to simulate.
-        vol : dict[float]
-            A dictionary mapping volumes to cell IDs.
-        mat : openmc_wrapper.Materials
-            Materials settings for the problem.
-        settings : openmc_wrapper.Settings
-            OpenMC simulation settings.
-        """
-
-        self.geometry = openmc_wrapper.Geometry()
-        # First, load in depletion data
-        self.load_depletion_data(settings.chain_file)
-        # Then, create geometry
-        self.geometry.geometry = geo
-        self.geometry.materials = mat
-        self.geometry.volume = vol
-        self.geometry.initialize(settings)
-
-        # Save settings
-        self.settings = settings
 
     def start(self):
         """ Creates initial files, and returns initial vector.

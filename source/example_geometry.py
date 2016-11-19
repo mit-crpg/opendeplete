@@ -1,8 +1,7 @@
 """An example file showing how to make a geometry.
 
-This particular example creates a 2x2 geometry, with 3 regular pins and one
-Gd-157 2 wt-percent enriched.  The geometry is reflected, with reflections
-going through the center of the Gd-157 pin.  Said pin is split into 5 rings.
+This particular example creates a 3x3 geometry, with 8 regular pins and one
+Gd-157 2 wt-percent enriched.  All pins are segmented.
 """
 
 from collections import OrderedDict
@@ -12,7 +11,6 @@ import os
 import numpy as np
 import openmc
 
-import function
 import openmc_wrapper
 
 
@@ -152,13 +150,101 @@ def generate_initial_number_density():
 
     return materials
 
+def segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad):
+    """ Calculates a segmented pin.
+
+    Separates a pin with n_rings and n_wedges.  All cells have equal volume.
+    Pin is centered at origin.
+    """
+
+    # Calculate all the volumes of interest
+    v_fuel = math.pi * r_fuel**2
+    v_gap = math.pi * r_gap**2 - v_fuel
+    v_clad = math.pi * r_clad**2 - v_fuel - v_gap
+    v_ring = v_fuel / n_rings
+    v_segment = v_ring / n_wedges
+
+    # Compute ring radiuses
+    r_rings = np.zeros(n_rings)
+
+    for i in range(n_rings):
+        r_rings[i] = math.sqrt(1.0/(math.pi) * v_ring * (i+1))
+
+    # Compute thetas
+    theta = np.linspace(0, 2*math.pi, n_wedges + 1)
+
+    # Compute surfaces
+    fuel_rings = [openmc.ZCylinder(x0=0, y0=0, R=r_rings[i])
+                  for i in range(n_rings)]
+
+    fuel_wedges = [openmc.Plane(A=math.cos(theta[i]), B=math.sin(theta[i]))
+                   for i in range(n_wedges)]
+
+    gap_ring = openmc.ZCylinder(x0=0, y0=0, R=r_gap)
+    clad_ring = openmc.ZCylinder(x0=0, y0=0, R=r_clad)
+
+    # Create cells
+    fuel_cells = []
+    if n_wedges == 1:
+        for i in range(n_rings):
+            cell = openmc.Cell(name='fuel')
+            if i == 0:
+                cell.region = -fuel_rings[0]
+            else:
+                cell.region = +fuel_rings[i-1] & -fuel_rings[i]
+            fuel_cells.append(cell)
+    else:
+        for i in range(n_rings):
+            for j in range(n_wedges):
+                cell = openmc.Cell(name='fuel')
+                if i == 0:
+                    if j != n_wedges-1:
+                        cell.region = (-fuel_rings[0]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[j+1])
+                    else:
+                        cell.region = (-fuel_rings[0]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[0])
+                else:
+                    if j != n_wedges-1:
+                        cell.region = (+fuel_rings[i-1]
+                                       & -fuel_rings[i]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[j+1])
+                    else:
+                        cell.region = (+fuel_rings[i-1]
+                                       & -fuel_rings[i]
+                                       & +fuel_wedges[j]
+                                       & -fuel_wedges[0])
+                fuel_cells.append(cell)
+
+    # Gap ring
+    gap_cell = openmc.Cell(name='gap')
+    gap_cell.region = +fuel_rings[-1] & -gap_ring
+    fuel_cells.append(gap_cell)
+
+    # Clad ring
+    clad_cell = openmc.Cell(name='clad')
+    clad_cell.region = +gap_ring & -clad_ring
+    fuel_cells.append(clad_cell)
+
+    # Moderator
+    mod_cell = openmc.Cell(name='cool')
+    mod_cell.region = +clad_ring
+    fuel_cells.append(mod_cell)
+
+    # Form universe
+    fuel_u = openmc.Universe()
+    fuel_u.add_cells(fuel_cells)
+
+    return fuel_u, v_segment, v_gap, v_clad
 
 def generate_geometry():
     """ Generates example geometry.
 
-    This function creates the initial geometry, a 4 pin reflective problem.
-    One pin, containing gadolinium, is discretized into 5 radial cells of
-    equal volume.  Reflections go through the center of this pin.
+    This function creates the initial geometry, a 9 pin reflective problem.
+    One pin, containing gadolinium, is discretized into sectors.
 
     In addition to what one would do with the general OpenMC geometry code, it
     is necessary to create a dictionary, volume, that maps a cell ID to a
@@ -171,113 +257,85 @@ def generate_geometry():
     r_gap = 0.418987
     r_clad = 0.476121
     n_rings = 5
+    n_wedges = 8
 
-    # Calculate all the volumes of interest ahead of time
-    v_fuel = math.pi * r_fuel**2
-    v_gap = math.pi * r_gap**2 - v_fuel
-    v_clad = math.pi * r_clad**2 - v_fuel - v_gap
-    v_ring = v_fuel / n_rings
+    n_pin = 3
 
-    # Form dictionaries for later use.
-    volume = OrderedDict()
+    # This table describes the 'fuel' to actual type mapping
+    # It's not necessary to do it this way.  Just adjust the initial conditions
+    # below.
+    mapping = ['fuel', 'fuel', 'fuel',
+               'fuel', 'fuel_gd', 'fuel',
+               'fuel', 'fuel', 'fuel']
 
-    # Calculate pin discretization radii
-    r_rings = np.zeros(n_rings)
+    # Form pin cell
+    fuel_u, v_segment, v_gap, v_clad = segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad)
 
-    # Remaining rings
-    for i in range(n_rings):
-        r_rings[i] = math.sqrt(1.0/(math.pi) * v_ring * (i+1))
+    # Form lattice
+    all_water_c = openmc.Cell(name='cool')
+    all_water_u = openmc.Universe(cells=(all_water_c, ))
 
-    # Form bounding box
-    left = openmc.XPlane(x0=0, name='left')
-    right = openmc.XPlane(x0=3/2*pitch, name='right')
-    bottom = openmc.YPlane(y0=0, name='bottom')
-    top = openmc.YPlane(y0=3/2*pitch, name='top')
+    lattice = openmc.RectLattice()
+    lattice.pitch = [pitch]*2
+    lattice.lower_left = [-pitch*n_pin/2, -pitch*n_pin/2]
+    lattice_array = [[fuel_u for i in range(n_pin)] for j in range(n_pin)]
+    lattice.universes = lattice_array
+    lattice.outer = all_water_u
 
-    left.boundary_type = 'reflective'
-    right.boundary_type = 'reflective'
-    top.boundary_type = 'reflective'
-    bottom.boundary_type = 'reflective'
+    # Bound universe
+    x_low = openmc.XPlane(x0=-pitch*n_pin/2, boundary_type='reflective')
+    x_high = openmc.XPlane(x0=pitch*n_pin/2, boundary_type='reflective')
+    y_low = openmc.YPlane(y0=-pitch*n_pin/2, boundary_type='reflective')
+    y_high = openmc.YPlane(y0=pitch*n_pin/2, boundary_type='reflective')
+    z_low = openmc.ZPlane(z0=-10, boundary_type='reflective')
+    z_high = openmc.ZPlane(z0=10, boundary_type='reflective')
 
-    # ----------------------------------------------------------------------
-    # Fill pin 1 (the one with gadolinium)
-    gd_fuel_r = [openmc.ZCylinder(x0=0, y0=0, R=r_rings[i])
-                 for i in range(n_rings)]
-    gd_clad_ir = openmc.ZCylinder(x0=0, y0=0, R=r_gap)
-    gd_clad_or = openmc.ZCylinder(x0=0, y0=0, R=r_clad)
+    # Compute bounding box
+    lower_left = [-pitch*n_pin/2, -pitch*n_pin/2, -10]
+    upper_right = [pitch*n_pin/2, pitch*n_pin/2, 10]
 
-    # Fuel rings
-    gd_fuel_cell = [openmc.Cell(name='fuel_gd') for i in range(n_rings)]
+    root_c = openmc.Cell(fill=lattice)
+    root_c.region = (+x_low & -x_high
+                     & +y_low & -y_high
+                     & +z_low & -z_high)
+    root_u = openmc.Universe(universe_id=0, cells=(root_c, ))
+    geometry = openmc.Geometry(root_u)
 
-    gd_fuel_cell[0].region = -gd_fuel_r[0] & +left & +bottom
-    volume[gd_fuel_cell[0].id] = v_ring / 4.0
+    v_cool = pitch**2 - (v_gap + v_clad + n_rings * n_wedges * v_segment)
 
-    for i in range(n_rings-1):
-        gd_fuel_cell[i+1].region = +gd_fuel_r[i] & -gd_fuel_r[i+1] &\
-                                   +left & +bottom
-        volume[gd_fuel_cell[i+1].id] = v_ring / 4.0
+    # Store volumes for later usage
+    volume = {'fuel': v_segment, 'gap':v_gap, 'clad':v_clad, 'cool':v_cool}
 
-    # Gap
-    gd_fuel_gap = openmc.Cell(name='gap')
-    gd_fuel_gap.region = +gd_fuel_r[n_rings-1] & -gd_clad_ir & +left & +bottom
-    volume[gd_fuel_gap.id] = v_gap / 4.0
+    return geometry, volume, mapping, lower_left, upper_right
 
-    # Clad
-    gd_fuel_clad = openmc.Cell(name='clad')
-    gd_fuel_clad.region = +gd_clad_ir & -gd_clad_or & +left & +bottom
-    volume[gd_fuel_clad.id] = v_clad / 4.0
+def generate_problem():
+    """ Merges geometry and materials.
 
-    # ----------------------------------------------------------------------
-    # Fill pin 2, 3 and 4 (without gadolinium)
-    coords = [[pitch, 0], [0, pitch], [pitch, pitch]]
+    This function initializes the materials for each cell using the dictionaries
+    provided by generate_initial_number_density.  It is assumed a cell named
+    'fuel' will have further region differentiation (see mapping).
+    """
 
-    fuel_s = [openmc.ZCylinder(x0=x[0], y0=x[1], R=r_fuel) for x in coords]
-    clad_ir_s = [openmc.ZCylinder(x0=x[0], y0=x[1], R=r_gap) for x in coords]
-    clad_or_s = [openmc.ZCylinder(x0=x[0], y0=x[1], R=r_clad) for x in coords]
+    # Get materials dictionary, geometry, and volumes
+    materials = generate_initial_number_density()
+    geometry, volume, mapping, lower_left, upper_right = generate_geometry()
 
-    fuel_cell = [openmc.Cell(name='fuel') for x in coords]
-    clad_cell = [openmc.Cell(name='clad') for x in coords]
-    gap_cell = [openmc.Cell(name='gap') for x in coords]
+    # Generate volume dictionary
+    vol_dict = OrderedDict()
 
-    fuel_cell[0].region = -fuel_s[0] & +bottom
-    fuel_cell[1].region = -fuel_s[1] & +left
-    fuel_cell[2].region = -fuel_s[2]
+    # Apply distribmats
+    cells = geometry.root_universe.get_all_cells()
+    for cell_id in cells:
+        cell = cells[cell_id]
+        if cell.name == 'fuel':
+            omc_mats = [openmc_wrapper.density_to_mat(materials.initial_density[cell_type])
+                        for cell_type in mapping]
+            cell.fill = omc_mats
+            for mat in omc_mats:
+                vol_dict[mat.id] = volume['fuel']
+        elif cell.name != '':
+            omc_mat = openmc_wrapper.density_to_mat(materials.initial_density[cell.name])
+            cell.fill = omc_mat
+            vol_dict[omc_mat.id] = volume[cell.name]
 
-    gap_cell[0].region = +fuel_s[0] & -clad_ir_s[0] & +bottom
-    gap_cell[1].region = +fuel_s[1] & -clad_ir_s[1] & +left
-    gap_cell[2].region = +fuel_s[2] & -clad_ir_s[2]
-
-    clad_cell[0].region = +clad_ir_s[0] & -clad_or_s[0] & +bottom
-    clad_cell[1].region = +clad_ir_s[1] & -clad_or_s[1] & +left
-    clad_cell[2].region = +clad_ir_s[2] & -clad_or_s[2]
-
-    volume[fuel_cell[0].id] = v_fuel / 2.0
-    volume[fuel_cell[1].id] = v_fuel / 2.0
-    volume[fuel_cell[2].id] = v_fuel
-
-    volume[gap_cell[0].id] = v_gap / 2.0
-    volume[gap_cell[1].id] = v_gap / 2.0
-    volume[gap_cell[2].id] = v_gap
-
-    volume[clad_cell[0].id] = v_clad / 2.0
-    volume[clad_cell[1].id] = v_clad / 2.0
-    volume[clad_cell[2].id] = v_clad
-
-    # ----------------------------------------------------------------------
-    # Fill coolant
-
-    cool_cell = openmc.Cell(name='cool')
-    cool_cell.region = +clad_or_s[0] & +clad_or_s[1] & +clad_or_s[2] &\
-                       +gd_clad_or & +left & -right & +bottom & -top
-    volume[cool_cell.id] = (3/2 * pitch)**2 - 2.25 * v_fuel - \
-        2.25 * v_gap - 2.25 * v_clad
-
-    # ----------------------------------------------------------------------
-    # Finalize geometry
-    root = openmc.Universe(universe_id=0, name='root universe')
-
-    root.add_cells([cool_cell] + clad_cell + gap_cell + fuel_cell +
-                   gd_fuel_cell + [gd_fuel_clad] + [gd_fuel_gap])
-
-    geometry = openmc.Geometry(root)
-    return geometry, volume
+    return geometry, vol_dict, materials, lower_left, upper_right

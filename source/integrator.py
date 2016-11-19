@@ -5,19 +5,19 @@ algorithm.  This includes matrix exponents, predictor, predictor-corrector, and
 eventually more.
 """
 
-from subprocess import call
+import concurrent.futures
+import copy
 import os
-from openmc_wrapper import *
+import time
+
+import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
-import numpy as np
-import time
-import copy
-import math
-import concurrent.futures
+
+from results import write_results
 
 
-def predictor(op):
+def predictor(operator):
     """ Runs a depletion problem using the predictor algorithm.
 
     This algorithm uses the beginning-of-timestep reaction rates for the whole
@@ -25,7 +25,7 @@ def predictor(op):
 
     Parameters
     ----------
-    op : function.Operator
+    operator : function.Operator
         The operator object to simulate on.
     """
 
@@ -33,37 +33,38 @@ def predictor(op):
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(op.settings.output_dir, exist_ok=True)
+    os.makedirs(operator.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(op.settings.output_dir)
+    os.chdir(operator.settings.output_dir)
 
     # Generate initial conditions
-    vec = op.start()
+    vec = operator.start()
 
-    time = 0.0
+    current_time = 0.0
     ind = 0
 
-    for dt in op.settings.dt_vec:
+    for dt in operator.settings.dt_vec:
         # Evaluate function at vec to get mat
-        mat, eigvl, r1, seed = op.eval(vec)
-        write_results(op, eigvl, [vec], [r1], [1], [seed], time, ind)
+        mat, eigvl, rates_1, seed = operator.eval(vec)
+        write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time, ind)
 
         # Update vec with the integrator.
         vec = matexp(mat, vec, dt)
-        time += dt
+        current_time += dt
         ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, seed = op.eval(vec)
-    write_results(op, eigvl, [vec], [r1], [1], [seed], time, ind)
+    mat, eigvl, rates_1, seed = operator.eval(vec)
+    write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time, ind)
 
     # Return to origin
     os.chdir(dir_home)
 
 
-def MCNPX(op):
-    """ Runs a depletion problem using the MCNPX Predictor-Corrector algorithm.
+def ce_cm(operator):
+    """ Runs a depletion problem using the center-extrapolate / center-midpoint
+    predictor-corrector algorithm.
 
     This algorithm is a second order algorithm where the predictor algorithm is
     used to get the midpoint number densities, another function is then run,
@@ -73,7 +74,7 @@ def MCNPX(op):
 
     Parameters
     ----------
-    op : function.Operator
+    operator : function.Operator
         The operator object to simulate on.
     """
 
@@ -81,44 +82,44 @@ def MCNPX(op):
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(op.settings.output_dir, exist_ok=True)
+    os.makedirs(operator.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(op.settings.output_dir)
+    os.chdir(operator.settings.output_dir)
 
     # Generate initial conditions
-    vec = op.start()
+    vec = operator.start()
 
-    time = 0.0
+    current_time = 0.0
     ind = 0
 
-    for dt in op.settings.dt_vec:
+    for dt in operator.settings.dt_vec:
         # Evaluate function at vec to get mat
-        mat, eigvl, r1, s1 = op.eval(vec)
+        mat, eigvl, rates_1, seed_1 = operator.eval(vec)
 
         # Step a half timestep
-        v1 = matexp(mat, vec, dt/2)
+        vec_1 = matexp(mat, vec, dt/2)
 
         # Update function using new RNG
-        mat, dummy, r2, s2 = op.eval(v1)
+        mat, dummy, rates_2, seed_2 = operator.eval(vec_1)
 
-        write_results(op, eigvl, [vec, v1], [r1, r2],
-                      [0, 1], [s1, s2], time, ind)
+        write_results(operator, eigvl, [vec, vec_1], [rates_1, rates_2],
+                      [0, 1], [seed_1, seed_2], current_time, ind)
 
         # Step a full timestep
         vec = matexp(mat, vec, dt)
-        time += dt
+        current_time += dt
         ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, s1 = op.eval(vec)
-    write_results(op, eigvl, [vec], [r1], [1], [s1], time, ind)
+    mat, eigvl, rates_1, seed_1 = operator.eval(vec)
+    write_results(operator, eigvl, [vec], [rates_1], [1], [seed_1], current_time, ind)
 
     # Return to origin
     os.chdir(dir_home)
 
 
-def QD(op):
+def quadratic(operator):
     """ Runs a depletion problem using a quadratic algorithm.
 
     This algorithm is a third order algorithm in which a linear extrapolation
@@ -134,7 +135,7 @@ def QD(op):
 
     Parameters
     ----------
-    op : function.Operator
+    operator : function.Operator
         The operator object to simulate on.
     """
 
@@ -142,88 +143,85 @@ def QD(op):
     dir_home = os.getcwd()
 
     # Move to folder
-    os.makedirs(op.settings.output_dir, exist_ok=True)
+    os.makedirs(operator.settings.output_dir, exist_ok=True)
 
     # Change directory
-    os.chdir(op.settings.output_dir)
+    os.chdir(operator.settings.output_dir)
 
     # Generate initial conditions
-    vec_bos = op.start()
-    vec_ps = copy.deepcopy(vec_bos)
+    vec_bos = operator.start()
 
     # Dummy variables to keep in scope
-    mat_ps = []
-    rps = []
-    sps = []
+    mat_prev = []
+    rates_prev = []
 
     cells = len(vec_bos)
 
-    time = 0.0
+    current_time = 0.0
     ind = 0
 
-    for i in range(len(op.settings.dt_vec)):
-        dt = op.settings.dt_vec[i]
+    for i in range(len(operator.settings.dt_vec)):
+        dt = operator.settings.dt_vec[i]
         if i == 0:
             # Constant Extrapolation
-            mat_bos, eigvl, r1, s1 = op.eval(vec_bos)
+            mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
 
             # Get EOS
             vec_eos = matexp(mat_bos, vec_bos, dt)
 
             # Linear Interpolation
-            mat_eos, eigvl, r2, s2 = op.eval(vec_eos)
+            mat_eos, eigvl, rates_2, seed_2 = operator.eval(vec_eos)
 
-            write_results(op, eigvl, [vec_bos, vec_eos], [r1, r2],
-                          [1/2, 1/2], [s1, s2], time, ind)
+            write_results(operator, eigvl, [vec_bos, vec_eos], [rates_1, rates_2],
+                          [1/2, 1/2], [seed_1, seed_2], current_time, ind)
 
             mat_ext = [mat_bos[i] * 1/2 + mat_eos[i] * 1/2
                        for i in range(cells)]
             vec_bos = matexp(mat_ext, vec_bos, dt)
 
-            # Set mat_ps
-            mat_ps = copy.deepcopy(mat_bos)
-            rps = copy.deepcopy(r1)
-            sps = s1
+            # Set mat_prev
+            mat_prev = copy.deepcopy(mat_bos)
+            rates_prev = copy.deepcopy(rates_1)
 
-            time += dt
+            current_time += dt
             ind += 1
         else:
             # Constant Extrapolation
-            dt_l = op.settings.dt_vec[i-1]
-            mat_bos, eigvl, r1, s1 = op.eval(vec_bos)
+            dt_l = operator.settings.dt_vec[i-1]
+            mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
 
             # Get EOS
             c1 = (-dt/(2.0 * dt_l))
             c2 = (1 + dt/(2.0 * dt_l))
-            mat_int = [mat_ps[i]*c1 + mat_bos[i]*c2 for i in range(cells)]
+            mat_int = [mat_prev[i]*c1 + mat_bos[i]*c2 for i in range(cells)]
             vec_eos = matexp(mat_int, vec_bos, dt)
 
             # Quadratic Extrapolation
-            mat_eos, eigvl, r2, s2 = op.eval(vec_eos)
+            mat_eos, eigvl, rates_2, seed_2 = operator.eval(vec_eos)
 
             # Store results
             c1 = (-dt**2/(6.0*dt_l*(dt + dt_l)))
             c2 = (1/2 + dt/(6.0*dt_l))
             c3 = (1/2 - dt/(6.0*(dt+dt_l)))
             # TODO find an acceptable compromise for AB-AM schemes.
-            write_results(op, eigvl, [vec_bos, vec_eos], [rps, r1, r2],
-                          [c1, c2, c3],  [s1, s2], time, ind)
+            write_results(operator, eigvl, [vec_bos, vec_eos], [rates_prev, rates_1, rates_2],
+                          [c1, c2, c3], [seed_1, seed_2], current_time, ind)
 
             # Get new BOS
-            mat_ext = [mat_ps[i]*c1 + mat_bos[i]*c2 + mat_eos[i]*c3
+            mat_ext = [mat_prev[i]*c1 + mat_bos[i]*c2 + mat_eos[i]*c3
                        for i in range(cells)]
             vec_bos = matexp(mat_ext, vec_bos, dt)
 
-            # Set mat_ps
-            mat_ps = copy.deepcopy(mat_bos)
-            rps = copy.deepcopy(r1)
+            # Set mat_prev
+            mat_prev = copy.deepcopy(mat_bos)
+            rates_prev = copy.deepcopy(rates_1)
 
-            time += dt
+            current_time += dt
             ind += 1
 
     # Run final simulation
-    mat, eigvl, r1, s1 = op.eval(vec_bos)
-    write_results(op, eigvl, [vec_bos], [r1], [1], [s1], time, ind)
+    mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
+    write_results(operator, eigvl, [vec_bos], [rates_1], [1], [seed_1], current_time, ind)
 
     # Return to origin
     os.chdir(dir_home)
@@ -313,25 +311,25 @@ def CRAM16(A, n0, dt):
         Results of the matrix exponent.
     """
 
-    alpha = np.array([2.124853710495224e-16,
-                      5.464930576870210e+3 - 3.797983575308356e+4j,
-                      9.045112476907548e+1 - 1.115537522430261e+3j,
-                      2.344818070467641e+2 - 4.228020157070496e+2j,
-                      9.453304067358312e+1 - 2.951294291446048e+2j,
-                      7.283792954673409e+2 - 1.205646080220011e+5j,
-                      3.648229059594851e+1 - 1.155509621409682e+2j,
-                      2.547321630156819e+1 - 2.639500283021502e+1j,
-                      2.394538338734709e+1 - 5.650522971778156e+0j],
+    alpha = np.array([+2.124853710495224e-16,
+                      +5.464930576870210e+3 - 3.797983575308356e+4j,
+                      +9.045112476907548e+1 - 1.115537522430261e+3j,
+                      +2.344818070467641e+2 - 4.228020157070496e+2j,
+                      +9.453304067358312e+1 - 2.951294291446048e+2j,
+                      +7.283792954673409e+2 - 1.205646080220011e+5j,
+                      +3.648229059594851e+1 - 1.155509621409682e+2j,
+                      +2.547321630156819e+1 - 2.639500283021502e+1j,
+                      +2.394538338734709e+1 - 5.650522971778156e+0j],
                      dtype=np.complex128)
-    theta = np.array([0.0,
-                      3.509103608414918 + 8.436198985884374j,
-                      5.948152268951177 + 3.587457362018322j,
-                     -5.264971343442647 + 16.22022147316793j,
-                      1.419375897185666 + 10.92536348449672j,
-                      6.416177699099435 + 1.194122393370139j,
-                      4.993174737717997 + 5.996881713603942j,
-                     -1.413928462488886 + 13.49772569889275j,
-                     -10.84391707869699 + 19.27744616718165j],
+    theta = np.array([+0.0,
+                      +3.509103608414918 + 8.436198985884374j,
+                      +5.948152268951177 + 3.587457362018322j,
+                      -5.264971343442647 + 16.22022147316793j,
+                      +1.419375897185666 + 10.92536348449672j,
+                      +6.416177699099435 + 1.194122393370139j,
+                      +4.993174737717997 + 5.996881713603942j,
+                      -1.413928462488886 + 13.49772569889275j,
+                      -10.84391707869699 + 19.27744616718165j],
                      dtype=np.complex128)
 
     n = A.shape[0]
@@ -340,7 +338,6 @@ def CRAM16(A, n0, dt):
 
     k = 8
 
-    e = np.ones(n, dtype=np.complex128)
     y = np.array(n0, dtype=np.float64)
     for l in range(1, k+1):
         y = 2.0*np.real(alpha[l]*sla.spsolve(A*dt - theta[l]*sp.eye(n), y)) + y

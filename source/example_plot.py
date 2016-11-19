@@ -2,8 +2,9 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pickle
+
 import utilities
+
 
 # Installation Folder
 folder = "/home/cjosey/code/opendeplete/source/"
@@ -25,13 +26,13 @@ t_ref *= 3600 * 24 * 30 / 1.022  # Convert from MWd-kgHM to seconds
 
 # Set variables for where the data is, and what we want to read out.
 result_folder = folder + "test"
-cells = [10000, 10001, 10002, 10003, 10004]
+cells = [x for x in range(10004, 10000+9*8*5, 9)]
 nuclides = ['Xe135', 'U235', 'Gd157']
 
 # Load data
 x, y = utilities.get_atoms_volaveraged(result_folder, cells, nuclides)
 
-
+# Plot data
 plt.semilogy(x, y['Gd157'])
 plt.semilogy(t_ref, gd_ref)
 plt.legend(('MCNP', 'Ref'), loc='best')
