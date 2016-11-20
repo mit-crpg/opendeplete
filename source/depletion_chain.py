@@ -211,11 +211,11 @@ class DepletionChain:
 
         Returns
         -------
-        matrix : scipy.sparse.csr_matrix
+        scipy.sparse.csr_matrix
             Sparse matrix representing depletion.
         """
 
-        matrix = defaultdict(lambda: 0)
+        matrix = defaultdict(float)
 
         for i in range(self.n_nuclides):
             nuc = self.nuclides[i]
@@ -225,7 +225,7 @@ class DepletionChain:
                 # Loss
                 decay_constant = math.log(2)/nuc.half_life
 
-                matrix[(i, i)] -= decay_constant
+                matrix[i, i] -= decay_constant
 
                 # Gain
                 for j in range(nuc.n_decay_paths):
@@ -235,7 +235,7 @@ class DepletionChain:
                     if target_nuc != 'Nothing':
                         k = self.nuclide_dict[target_nuc]
 
-                        matrix[(k, i)] += \
+                        matrix[k, i] += \
                             nuc.branching_ratio[j] * decay_constant
 
             if nuc.name in rates.nuc_to_ind:
@@ -248,7 +248,7 @@ class DepletionChain:
                     path_rate = nuc_rates[r_id]
 
                     # Loss term
-                    matrix[(i, i)] -= path_rate
+                    matrix[i, i] -= path_rate
 
                     # Gain term
                     target_nuc = nuc.reaction_target[j]
@@ -257,22 +257,22 @@ class DepletionChain:
                     if target_nuc != 'Nothing':
                         if path != 'fission':
                             k = self.nuclide_dict[target_nuc]
-                            matrix[(k, i)] += path_rate
+                            matrix[k, i] += path_rate
                         else:
                             m = self.precursor_dict[nuc.name]
 
                             for k in range(self.yields.n_fis_prod):
                                 l = self.nuclide_dict[self.yields.name[k]]
                                 # Todo energy
-                                matrix[(l, i)] += \
+                                matrix[l, i] += \
                                     self.yields.fis_yield_data[k, 0, m] * \
                                     path_rate
 
-
+        # Use DOK matrix as intermediate representation, then convert to CSR and
+        # return
         matrix_dok = sp.dok_matrix((self.n_nuclides, self.n_nuclides))
         matrix_dok.update(matrix)
-        matrix = matrix_dok.tocsr()
-        return matrix
+        return matrix_dok.tocsr()
 
     def nuc_by_ind(self, ind):
         """ Extracts nuclides from the list by dictionary key.
