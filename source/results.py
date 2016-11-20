@@ -109,8 +109,8 @@ def merge_results(rates_array, weights_array):
                                          rates_array[0].react_to_ind)
 
     # Then, merge results
-    for i in range(len(weights_array)):
-        r_bar.rates += rates_array[i].rates
+    for weight_i, rates_i in zip(weights_array, rates_array):
+        r_bar.rates += weight_i*rates_i.rates
 
     return r_bar
 
