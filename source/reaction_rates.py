@@ -44,10 +44,6 @@ class ReactionRates:
         self.nuc_to_ind = nuc_to_ind
         self.react_to_ind = react_to_ind
 
-        self.n_cell = len(cell_to_ind)
-        self.n_nuc = len(nuc_to_ind)
-        self.n_react = len(react_to_ind)
-
         self.rates = np.zeros((self.n_cell, self.n_nuc, self.n_react))
 
     def __getitem__(self, pos):
@@ -55,7 +51,7 @@ class ReactionRates:
 
         Parameters
         ----------
-        pos : Tuple
+        pos : tuple
             A three-length tuple containing a cell index, a nuc index, and a
             reaction index.  These indexes can be strings (which get converted
             to integers via the dictionaries), integers used directly, or
@@ -69,26 +65,20 @@ class ReactionRates:
 
         cell, nuc, react = pos
         if isinstance(cell, str):
-            cell_id = self.cell_to_ind[cell]
-        else:
-            cell_id = cell
+            cell = self.cell_to_ind[cell]
         if isinstance(nuc, str):
-            nuc_id = self.nuc_to_ind[nuc]
-        else:
-            nuc_id = nuc
+            nuc = self.nuc_to_ind[nuc]
         if isinstance(react, str):
-            react_id = self.react_to_ind[react]
-        else:
-            react_id = react
+            react = self.react_to_ind[react]
 
-        return self.rates[cell_id, nuc_id, react_id]
+        return self.rates[cell, nuc, react]
 
     def __setitem__(self, pos, val):
         """ Sets an item from reaction_rates.
 
         Parameters
         ----------
-        pos : Tuple
+        pos : tuple
             A three-length tuple containing a cell index, a nuc index, and a
             reaction index.  These indexes can be strings (which get converted
             to integers via the dictionaries), integers used directly, or
@@ -99,16 +89,22 @@ class ReactionRates:
 
         cell, nuc, react = pos
         if isinstance(cell, str):
-            cell_id = self.cell_to_ind[cell]
-        else:
-            cell_id = cell
+            cell = self.cell_to_ind[cell]
         if isinstance(nuc, str):
-            nuc_id = self.nuc_to_ind[nuc]
-        else:
-            nuc_id = nuc
+            nuc = self.nuc_to_ind[nuc]
         if isinstance(react, str):
-            react_id = self.react_to_ind[react]
-        else:
-            react_id = react
+            react = self.react_to_ind[react]
 
-        self.rates[cell_id, nuc_id, react_id] = val
+        self.rates[cell, nuc, react] = val
+
+    @property
+    def n_cell(self):
+        return len(self.cell_to_ind)
+
+    @property
+    def n_nuc(self):
+        return len(self.nuc_to_ind)
+
+    @property
+    def n_react(self):
+        return len(self.react_to_ind)

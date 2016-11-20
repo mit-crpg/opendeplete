@@ -39,19 +39,25 @@ class Nuclide:
         self.half_life = None
 
         # Decay paths
-        self.n_decay_paths = None
-        self.decay_target = None
-        self.decay_type = None
-        self.branching_ratio = None
+        self.decay_target = []
+        self.decay_type = []
+        self.branching_ratio = []
 
         # Reaction paths and rates
-        self.n_reaction_paths = None
-        self.reaction_target = None
-        self.reaction_type = None
+        self.reaction_target = []
+        self.reaction_type = []
 
         self.yield_ind = None
 
-        self.fission_power = None
+        self.fission_power = 0.0
+
+    @property
+    def n_decay_paths(self):
+        return len(self.decay_target)
+
+    @property
+    def n_reaction_paths(self):
+        return len(self.reaction_target)
 
 
 class Yield:
@@ -82,15 +88,23 @@ class Yield:
     """
 
     def __init__(self):
-        self.n_fis_prod = None
-        self.n_precursors = None
-        self.n_energies = None
-
-        self.name = None
-        self.precursor_list = None
-        self.energy_list = None
+        self.name = []
+        self.precursor_list = []
+        self.energy_list = []
 
         self.fis_prod_dict = None
         self.energy_dict = None
 
         self.fis_yield_data = None
+
+    @property
+    def n_fis_prod(self):
+        return len(self.name)
+
+    @property
+    def n_precursors(self):
+        return len(self.precursor_list)
+
+    @property
+    def n_energies(self):
+        return len(self.energy_list)
