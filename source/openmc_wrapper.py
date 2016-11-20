@@ -3,14 +3,19 @@
 This module implements the OpenDeplete -> OpenMC linkage.
 """
 
-import os
-import time
-from subprocess import call
 from collections import OrderedDict
+import concurrent.futures
+import os
+import random
+from subprocess import call
+import sys
+import time
+import xml.etree.ElementTree as ET
 
 import numpy as np
-
 import openmc
+from openmc.stats import Box
+
 import reaction_rates
 import depletion_chain
 
@@ -336,9 +341,6 @@ class Geometry:
         ----
             Rewrite to generalize source box.
         """
-        import random
-        import sys
-        from openmc.stats import Box
 
         batches = settings.batches
         inactive = settings.inactive
@@ -416,7 +418,6 @@ class Geometry:
         ----
             Generalize method away from process parallelism.
         """
-        import concurrent.futures
 
         # An issue with concurrent.futures is that it is far easier to write a
         # map, so I need to concatenate the data into a single variable with
@@ -622,7 +623,6 @@ class Geometry:
         filename : str
             Path to cross_sections.xml
         """
-        import xml.etree.ElementTree as ET
 
         # Reads cross_sections.xml to create a dictionary containing
         # participating (burning and not just decaying) nuclides.

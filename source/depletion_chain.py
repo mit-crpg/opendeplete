@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 import scipy.sparse as sp
+
 import nuclide
 
 
@@ -137,8 +138,6 @@ class DepletionChain:
         nfy_node = root.find('neutron_fission_yields')
 
         self.yields = nuclide.Yield()
-
-        # code.interact(local=locals())
 
         # Create and load all the variables
         self.yields.n_fis_prod = int(nfy_node.find('nuclides').text)
