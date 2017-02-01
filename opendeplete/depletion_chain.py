@@ -14,7 +14,7 @@ import scipy.sparse as sp
 from .nuclide import Nuclide, Yield
 
 
-class DepletionChain:
+class DepletionChain(object):
     """ The DepletionChain class.
 
     This class contains a full representation of a depletion chain.
@@ -47,6 +47,7 @@ class DepletionChain:
 
     @property
     def n_nuclides(self):
+        """Number of nuclides in chain."""
         return len(self.nuclides)
 
     def xml_read(self, filename):

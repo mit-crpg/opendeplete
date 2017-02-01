@@ -36,4 +36,4 @@ settings.output_dir = 'test'
 op = opendeplete.Operator(geometry, volume, materials, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
-opendeplete.ce_cm(op)
+opendeplete.integrate(op, opendeplete.ce_cm_c1)

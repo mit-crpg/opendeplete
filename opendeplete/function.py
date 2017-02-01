@@ -133,3 +133,13 @@ class Operator:
         # rate objects
         self.geometry.chain = DepletionChain()
         self.geometry.chain.xml_read(filename)
+        self.geometry.fill_nuclide_list()
+
+    def get_results_info(self):
+        """ Returns non-participating nuclides, cell lists, and nuc lists.
+
+        """
+
+        return self.geometry.nuc_list, \
+               self.geometry.burn_list, \
+               self.geometry.get_non_participating_nuc()

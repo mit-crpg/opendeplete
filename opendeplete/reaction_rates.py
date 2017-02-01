@@ -6,7 +6,7 @@ Just contains a dictionary of np.arrays to store reaction rates.
 import numpy as np
 
 
-class ReactionRates:
+class ReactionRates(object):
     """ The Nuclide class.
 
     Contains everything in a depletion chain relating to a single nuclide.
@@ -99,12 +99,15 @@ class ReactionRates:
 
     @property
     def n_cell(self):
+        """Number of cells."""
         return len(self.cell_to_ind)
 
     @property
     def n_nuc(self):
+        """Number of nucs."""
         return len(self.nuc_to_ind)
 
     @property
     def n_react(self):
+        """Number of reactions."""
         return len(self.react_to_ind)
