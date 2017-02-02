@@ -75,6 +75,13 @@ def integrate(operator, coeffs):
         eigvls = []
         rates_array = []
 
+        # Ensure timestep does not fall off edge
+        if current_time + dt > end_time:
+            dt = end_time - current_time
+            # Ensure termination in case of roundoff
+            if dt < 1.0e-12 * end_time:
+                break
+
         # For each component vector
         for s in range(int_step):
             # Compute f as needed
