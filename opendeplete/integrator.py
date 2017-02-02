@@ -78,7 +78,7 @@ def integrate(operator, coeffs):
         # For each component vector
         for s in range(int_step):
             # Compute f as needed
-            if step_ind == 1 or not coeffs.fsal or s > 1:
+            if step_ind == 1 or not coeffs.fsal or s > 0:
                 mat, eigvl, rates, seed = operator.eval(x[s])
             else:
                 # Use stored FSAL data
@@ -141,16 +141,16 @@ def integrate(operator, coeffs):
         # Compute next time step and store values if FSAL
         current_time += dt
         step_ind += 1
-        vec = copy.copy(x[coeffs.final_ind])
+        vec = copy.deepcopy(x[coeffs.final_ind])
 
         if ats_mode:
             dt = 0.9 * dt * (relerr / tol)**(1/coeffs.order)
 
         if coeffs.fsal:
-            mat_last = copy.copy(f[coeffs.final_ind])
-            eigvl_last = copy.copy(eigvls[coeffs.final_ind])
-            rates_last = copy.copy(rates_array[coeffs.final_ind])
-            seed_last = copy.copy(seeds[coeffs.final_ind])
+            mat_last = copy.deepcopy(f[coeffs.final_ind])
+            eigvl_last = copy.deepcopy(eigvls[coeffs.final_ind])
+            rates_last = copy.deepcopy(rates_array[coeffs.final_ind])
+            seed_last = copy.deepcopy(seeds[coeffs.final_ind])
 
     # Return to origin
     os.chdir(dir_home)
