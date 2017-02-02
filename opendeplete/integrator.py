@@ -103,7 +103,7 @@ def integrate(operator, coeffs):
 
             if relerr > tol:
                 # Compute new timestep
-                dt = 0.9 * dt * (relerr / tol)**(1/coeffs.order)
+                dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
                 continue
 
         # Compute rest of stages (for interpolation)
@@ -144,7 +144,7 @@ def integrate(operator, coeffs):
         vec = copy.deepcopy(x[coeffs.final_ind])
 
         if ats_mode:
-            dt = 0.9 * dt * (relerr / tol)**(1/coeffs.order)
+            dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
 
         if coeffs.fsal:
             mat_last = copy.deepcopy(f[coeffs.final_ind])
@@ -183,6 +183,8 @@ def compute_x(coeffs, f, x, dt, stage):
     # List for sub-vectors
     x_sub = []
 
+    cells = len(x[0])
+
     for i in range(stage + 1):
         # To save some time, determine if this index i is needed
         if coeffs.d[stage, i] == 0:
@@ -190,7 +192,10 @@ def compute_x(coeffs, f, x, dt, stage):
         # Compute matrix sum in exponent
         mat = compose_matrix(coeffs, f, stage, i)
 
-        x_sub.append(coeffs.d[stage, i] * matexp(mat, x[i], dt))
+        matrix_exponent = matexp(mat, x[i], dt)
+        x_a = [coeffs.d[stage, i] * matrix_exponent[j] for j in range(cells)]
+
+        x_sub.append(x_a)
 
     return vector_sum(x_sub)
 

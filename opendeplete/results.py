@@ -244,16 +244,12 @@ def evaluate_result_list(results, n_points, use_interpolation=True):
 
 
                 # Evaluate value in each region
-                for result in results:
+                for res_i, result in enumerate(results):
                     ind1 = np.argmax(time >= result.time[0])
                     ind2 = np.argmax(time >= result.time[1])
 
-                    if ind1 == ind2:
-                        # ind2 is probably the end
+                    if res_i == len(results) - 1:
                         ind2 = len(time)
-
-                    if ind2 == 0 and ind1 > 1:
-                        ind2 = len(time)-1
 
                     concentration[cell][nuc][ind1:ind2] = \
                         result.evaluate(cell, nuc, time[ind1:ind2])
