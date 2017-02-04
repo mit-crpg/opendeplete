@@ -128,36 +128,36 @@ class Geometry:
         The OpenMC geometry object.
     volume : OrderedDict[float]
         Given a material ID, gives the volume of said material.
-    materials : openmc_wrapper.Materials
+    materials : Materials
         Materials to be used for this simulation.
     seed : int
         The RNG seed used in last OpenMC run.
-    number_density : OrderedDict[OrderedDict[float]]
+    number_density : OrderedDict of int to OrderedDict of str to float
         The number density of a nuclide in a cell.  Indexed as
         number_density[cell ID : int][nuclide : str].
-    total_number : OrderedDict[OrderedDict[float]]
+    total_number : OrderedDict of int to OrderedDict of str to float
         The number density of a nuclide in a cell multiplied by the volume of
         the cell.  Indexed as total_number[cell ID : int][nuclide : str].
-    participating_nuclides : Set[str]
+    participating_nuclides : set of str
         A set listing all unique nuclides available from cross_sections.xml.
-    nuc_list : List[string]
+    nuc_list : list of str
         A list of all nuclide names. Used for sorting the simulation.
-    burn_list : List[int]
+    burn_list : list of int
         A list of all cell IDs to be burned.  Used for sorting the simulation.
-    chain : depletion_chain.DepletionChain
+    chain : DepletionChain
         The depletion chain information necessary to form matrices and tallies.
-    reaction_rates : reaction_rates.ReactionRates
+    reaction_rates : ReactionRates
         Reaction rates from the last operator step.
-    power : OrderedDict[float]
+    power : OrderedDict of str to float
         Cell-by-Cell power.  Indexed by cell ID.
-    mat_name : OrderedDict[str]
+    mat_name : OrderedDict of str to int
         The name of region each cell is set to.  Indexed by cell ID.
-    burn_mat_to_id : OrderedDict[int]
+    burn_mat_to_id : OrderedDict of str to int
         Dictionary mapping material ID (as a string) to an index in reaction_rates.
-    burn_nuc_to_id : OrderedDict[int]
+    burn_nuc_to_id : OrderedDict of str to int
         Dictionary mapping nuclide name (as a string) to an index in
         reaction_rates.
-    n_nuc : Int
+    n_nuc : int
         Number of nuclides considered in the decay chain.
     """
 
@@ -186,7 +186,7 @@ class Geometry:
 
         Parameters
         ----------
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Settings to initialize with.
         """
 
@@ -240,18 +240,18 @@ class Geometry:
 
         Parameters
         ----------
-        vec : List[numpy.array]
+        vec : list of numpy.array
             Total atoms to be used in function.
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Settings to run the sim with.
 
         Returns
         -------
-        mat : List[scipy.sparse.csr_matrix]
+        mat : list of scipy.sparse.csr_matrix
             Matrices for the next step.
         k : float
             Eigenvalue of the problem.
-        rates : reaction_rates.ReactionRates
+        rates : ReactionRates
             Reaction rates from this simulation.
         seed : int
             Seed for this simulation.
@@ -294,7 +294,7 @@ class Geometry:
 
         Returns
         -------
-        list[numpy.array]
+        list of numpy.array
             Total density for initial conditions.
         """
         # Write geometry.xml
@@ -342,7 +342,7 @@ class Geometry:
 
         Parameters
         ----------
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Operator settings configuration.
 
         Todo
@@ -419,7 +419,7 @@ class Geometry:
 
         Returns
         -------
-        List[scipy.sparse.csr_matrix]
+        list of scipy.sparse.csr_matrix
             A list of sparse depletion matrices.
 
         Todo
@@ -462,7 +462,7 @@ class Geometry:
 
         Returns
         -------
-        List[numpy.array]
+        list of numpy.array
             A list of np.arrays containing total atoms of each cell.
         """
 
@@ -487,6 +487,11 @@ class Geometry:
     def get_non_participating_nuc(self):
         """ Returns a nested dictionary of nuclides not participating.
 
+        Returns
+        -------
+        not_participating : dict of str to dict of str to float
+            Not participating nuclides, indexed by cell id and nuclide id.
+
         """
 
         not_participating = {}
@@ -510,7 +515,7 @@ class Geometry:
 
         Parameters
         ----------
-        total_density : list[numpy.array]
+        total_density : list of numpy.array
             Total atoms.
         """
 
@@ -709,10 +714,9 @@ def extract_openmc_materials(cell):
 
     Returns
     -------
-    List[OrderedDict[float]]
+    list of OrderedDict of str to float
         A list of ordered dictionaries containing the nuclides of interest.
-
-    List[int]
+    list of int
         IDs of the materials used.
     """
 

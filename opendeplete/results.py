@@ -13,15 +13,15 @@ from .reaction_rates import ReactionRates
 RESULTS_VERSION = 1
 
 class Results(object):
-    """
+    """ Contains output of opendeplete.
 
     Attributes
     ----------
-    k : List[float]
+    k : list of float
         Eigenvalue at beginning, end of step.
-    seeds : List[int]
+    seeds : list of int
         Seeds for each substep.
-    time : List[float]
+    time : list of float
         Time at beginning, end of step, in seconds.
     n_cell : int
         Number of cells.
@@ -29,17 +29,17 @@ class Results(object):
         Number of nuclides.
     p_terms : int
         Polynomial order.
-    rates : List[reaction_rates.ReactionRates]
+    rates : list of ReactionRates
         The reaction rates for each substep.
-    volume : OrderedDict[float]
+    volume : OrderedDict of int to float
         Dictionary mapping cell id to volume.
-    final_stage : Ind
+    final_stage : int
         Index of final stage
-    cell_to_ind : OrderedDict[int]
+    cell_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
-    nuc_to_ind : OrderedDict[int]
+    nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
-    data : np.array
+    data : numpy.array
         Number density polynomial coefficients, stored by cell, then by
         nuclide.
     """
@@ -63,9 +63,9 @@ class Results(object):
 
         Parameters
         ----------
-        operator : function.Function
+        operator : Function
             The operator used to generate these results.
-        p_terms : Int
+        p_terms : int
             Terms of polynomial.
         """
         self.p_terms = p_terms
@@ -99,7 +99,7 @@ class Results(object):
 
         Returns
         -------
-        np.array
+        numpy.array
             The polynomial coefficients at the index of interest.
         """
 
@@ -120,7 +120,7 @@ class Results(object):
             A two-length tuple containing a cell index and a nuc index.  These
             indexes can be strings (which get converted to integers via the
             dictionaries), integers used directly, or slices.
-        val : float
+        val : numpy.array
             The value to set the polynomial to.
         """
 
@@ -137,16 +137,16 @@ class Results(object):
 
         Parameters
         ----------
-        cell : Int or String
+        cell : int or str
             Cell index to evaluate at.
-        nuc : Int or String
+        nuc : int or str
             Nuclide to evaluate at.
-        time : np.array
+        time : numpy.array
             Time at which to evaluate the polynomial.
 
         Returns
         -------
-        np.array
+        numpy.array
             The polynomial value corresponding to time.
         """
 
@@ -160,7 +160,7 @@ class Results(object):
 
         Parameters
         ----------
-        handle
+        handle : h5py.File or h5py.Group
             An hdf5 file or group type to store this in.
         """
 
@@ -236,9 +236,9 @@ class Results(object):
 
         Parameters
         ----------
-        handle
+        handle : h5py.File or h5py.Group
             An hdf5 file or group type to store this in.
-        index : Int
+        index : int
             What step is this?
         """
 
@@ -291,9 +291,9 @@ class Results(object):
 
         Parameters
         ----------
-        handle
+        handle : h5py.File or h5py.Group
             An hdf5 file or group type to load from.
-        index : Int
+        index : int
             What step is this?
         """
 
@@ -359,17 +359,17 @@ def get_dict(nested_dict, burn_list):
 
     Parameters
     ----------
-    nested_dict : OrderedDict[OrderedDict[Float]]
+    nested_dict : OrderedDict of str to OrderedDict of str to Float
         Dictionary with first index corresponding to cell, second corresponding
         to nuclide, maps to total atom quantity.
-    burn_list : List[int]
+    burn_list : list of int
         A list of all cell IDs to be burned.
 
     Returns
     -------
-    cell_to_ind : Dict
+    cell_to_ind : OrderedDict of str to int
         Maps cell strings to index in array.
-    nuc_to_ind : Dict
+    nuc_to_ind : OrderedDict of str to int
         Maps nuclide strings to index in array.
     """
 
@@ -402,7 +402,7 @@ def write_results(result, filename, index):
         Object to be stored in a file.
     filename : String
         Target filename, without extension.
-    index : Int
+    index : int
         What step is this?
     """
 
@@ -426,7 +426,7 @@ def read_results(filename):
 
     Returns
     -------
-    results : List[Results]
+    results : list of Results
         The result objects.
     """
 

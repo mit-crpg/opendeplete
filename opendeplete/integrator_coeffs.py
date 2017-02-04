@@ -17,19 +17,19 @@ class Integrator(object):
     p : numpy.ndarray
         The coefficients necessary for constructing an interpolating
         polynomial.
-    final_ind : Int
+    final_ind : int
         Index of final stage.
-    ats_ind : Int
+    ats_ind : int
         Index of adaptive timestepping stage.
-    fsal : Bool
+    fsal : bool
         Does this method leverage first-same-as-last?
-    ats : Bool
+    ats : bool
         Does this method leverage adaptive timestepping?
-    order : Int
+    order : int
         The global order of the method.
-    p_terms : Int
+    p_terms : int
         Number of terms in interpolating polynomial.
-    int_terms : Int
+    int_terms : int
         Number of terms to use in interpolating polynomial.
     """
 

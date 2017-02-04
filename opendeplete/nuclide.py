@@ -17,15 +17,15 @@ class Nuclide(object):
         Half life of nuclide.
     n_decay_paths : int
         Number of decay pathways.
-    decay_target : List[str]
+    decay_target : list of str
         Names of targets nuclide can decay to.
-    branching_ratio : List[float]
+    branching_ratio : list of float
         Branching ratio for each target.
     n_reaction_paths : int
         Number of possible reaction pathways.
-    reaction_target : List[str]
+    reaction_target : list of str
         List of names of targets of reactions.
-    reaction_type : List[str]
+    reaction_type : list of str
         List of names of reactions.
     yield_ind : int
         Index in nuclide.Yield table.
@@ -75,17 +75,17 @@ class Yield(object):
         Number of precursor nuclides.
     n_energies
         Number of energies.
-    name : List[str]
+    name : list of str
         Name of fission products.
-    precursor_list : List[str]
+    precursor_list : list of str
         Name of precursors.
-    energy_list : List[float]
+    energy_list : list float
         Energy list.
-    fis_prod_dict : Dict[int]
+    fis_prod_dict : dict of str to int
         Maps fission product name to index in fis_yield_data.
-    energy_dict : Dict[int]
+    energy_dict : dict of float to int
         Maps an energy to an index in fis_yield_data.
-    fis_yield_data : np.array
+    fis_yield_data : numpy.array
         Fission yield data, indexed as [product ind, energy ind, nuclide ind].
     """
 

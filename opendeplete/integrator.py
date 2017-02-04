@@ -24,9 +24,9 @@ def integrate(operator, coeffs):
 
     Parameters
     ----------
-    operator : function.Operator
+    operator : Operator
         The operator object to simulate on.
-    coeffs : integrator_coeffs.Integrator
+    coeffs : Integrator
         Coefficients to use to integrate with.
     """
 
@@ -169,11 +169,11 @@ def compute_x(coeffs, f, x, dt, stage):
 
     Parameters
     ----------
-    coeffs : integrator_coeffs.Integrator
+    coeffs : Integrator
         Coefficients to use in this calculation.
-    f : List[List[scipy.sparse.csr_matrix]]
+    f : list of list of scipy.sparse.csr_matrix
         The depletion matrices.  Indexed [j][cell] using the above equation.
-    x : List[List[numpy.array]]
+    x : list of list of numpy.array
         The prior x vectors.  Indexed [i][cell] using the above equation.
     dt : Float
         The current timestep.
@@ -182,7 +182,7 @@ def compute_x(coeffs, f, x, dt, stage):
 
     Returns
     -------
-    List[numpy.array]
+    list of numpy.array
         The next x component for each cell.
     """
 
@@ -213,9 +213,9 @@ def compose_matrix(coeffs, f, stage, i):
 
     Parameters
     ----------
-    coeffs : integrator_coeffs.Integrator
+    coeffs : Integrator
         Coefficients to use in this calculation.
-    f : List[List[scipy.sparse.csr_matrix]]
+    f : list of list of scipy.sparse.csr_matrix
         The depletion matrices.  Indexed [j][cell] using the above equation.
     stage : Int
         Index s in the above equation.
@@ -224,7 +224,7 @@ def compose_matrix(coeffs, f, stage, i):
 
     Returns
     -------
-    List[scipy.sparse.csr_matrix]
+    list of scipy.sparse.csr_matrix
         The next matrix.
     """
 
@@ -247,9 +247,9 @@ def compute_max_relerr(v1, v2):
 
     Parameters
     ----------
-    v1 : List[numpy.array]
+    v1 : list of numpy.array
         Vector 1 for each cell.
-    v2 : List[numpy.array]
+    v2 : list of numpy.array
         Vector 2 for each cell.
 
     Returns
@@ -277,16 +277,16 @@ def compute_results(op, coeffs, x):
 
     Parameters
     ----------
-    op : function.Function
+    op : Function
         The operator used to generate these results.
-    coeffs : integrator_coeffs.Integrator
+    coeffs : Integrator
         Coefficients to use in this calculation.
-    x : List[List[numpy.array]]
+    x : list of list of numpy.array
         The prior x vectors.  Indexed [i][cell] using the above equation.
 
     Returns
     -------
-    results : results.Results
+    results : Results
         A mostly-filled results object for saving to disk.
     """
 
@@ -341,16 +341,16 @@ def matexp(mat, vec, dt):
 
     Parameters
     ----------
-    mat : List[scipy.sparse.csr_matrix]
+    mat : list of scipy.sparse.csr_matrix
         Matrices to take exponent of.
-    vec : List[numpy.array]
+    vec : list of numpy.array
         Vectors to operate a matrix exponent on.
     dt : float
         Time to integrate to.
 
     Returns
     -------
-    List[numpy.array]
+    list of numpy.array
         List of results of the matrix exponent.
     """
 
@@ -378,13 +378,13 @@ def matexp_wrapper(data):
 
     Parameters
     ----------
-    data : Tuple
+    data : tuple of scipy.sparse.csr_matrix, numpy.array, float
         First entry is a csr_matrix, second is the vector, third is the time to
         step to.
 
     Returns
     -------
-    List[numpy.array]
+    list of numpy.array
         List of results of the matrix exponent.
     """
     return CRAM48(data[0], np.array(data[1]), data[2])
@@ -413,7 +413,7 @@ def CRAM16(A, n0, dt):
 
     Returns
     -------
-    np.array
+    numpy.array
         Results of the matrix exponent.
     """
 
@@ -475,7 +475,7 @@ def CRAM48(A, n0, dt):
 
     Returns
     -------
-    np.array
+    numpy.array
         Results of the matrix exponent.
     """
 

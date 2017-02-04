@@ -13,20 +13,20 @@ class ReactionRates(object):
 
     Parameters
     ----------
-    cell_to_ind : OrderedDict[int]
+    cell_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
-    nuc_to_ind : OrderedDict[int]
+    nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
-    react_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict of str to int
         A dictionary mapping reaction name as string to index.
 
     Attributes
     ----------
-    cell_to_ind : OrderedDict[int]
+    cell_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
-    nuc_to_ind : OrderedDict[int]
+    nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
-    react_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict of str to int
         A dictionary mapping reaction name as string to index.
     n_cell : int
         Number of cells.

@@ -11,15 +11,15 @@ def evaluate_single_nuclide(results, n_points, cell, nuc, use_interpolation=True
 
     Parameters
     ----------
-    results : List[Results]
+    results : list of results
         The results to extract data from.  Must be sorted and continuous.
-    n_points : Int
+    n_points : int
         Number of points, equally spaced, to evaluate on.
-    cell : String
+    cell : str
         Cell name to evaluate
-    nuc : String
+    nuc : str
         Nuclide name to evaluate
-    use_interpolation : Bool
+    use_interpolation : bool
         Whether or not to use the algorithm-defined interpolation.
         n_points will be ignored.
 
@@ -70,13 +70,13 @@ def evaluate_reaction_rate(results, cell, nuc, rxn):
 
     Parameters
     ----------
-    results : List[Results]
+    results : list of Results
         The results to extract data from.  Must be sorted and continuous.
-    cell : String
+    cell : str
         Cell name to evaluate
-    nuc : String
+    nuc : str
         Nuclide name to evaluate
-    rxn : String
+    rxn : str
         Reaction rate to evaluate
 
     Returns
@@ -111,7 +111,7 @@ def evaluate_eigenvalue(results):
 
     Parameters
     ----------
-    results : List[Results]
+    results : list of Results
         The results to extract data from.  Must be sorted and continuous.
 
     Returns

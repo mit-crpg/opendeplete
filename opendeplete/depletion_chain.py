@@ -23,15 +23,15 @@ class DepletionChain(object):
     ----------
     n_nuclides : int
         Number of nuclides in chain.
-    nuclides : List[nuclide.Nuclide]
+    nuclides : list of Nuclide
         List of nuclides in chain.
-    nuclide_dict : OrderedDict[int]
+    nuclide_dict : OrderedDict of str to int
         Maps a nuclide name to an index in nuclides.
-    precursor_dict : OrderedDict[int]
+    precursor_dict : OrderedDict of str to int
         Maps a nuclide name to an index in yields.fis_yield_data
-    yields : nuclide.Yield
+    yields : Yield
         Yield object for fission.
-    react_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict of str to int
         Dictionary mapping a reaction name to an index in ReactionRates.
     """
 
@@ -173,7 +173,7 @@ class DepletionChain(object):
 
         Parameters
         ----------
-        rates : reaction_rates.ReactionRates
+        rates : ReactionRates
             Reaction rates to form matrix from.
         cell_id : int
             Cell coordinate in rates to evaluate for.
@@ -191,7 +191,7 @@ class DepletionChain(object):
             if nuc.n_decay_paths != 0:
                 # Decay paths
                 # Loss
-                decay_constant = math.log(2)/nuc.half_life
+                decay_constant = math.log(2) / nuc.half_life
 
                 matrix[i, i] -= decay_constant
 
@@ -203,8 +203,7 @@ class DepletionChain(object):
                     if target_nuc != 'Nothing':
                         k = self.nuclide_dict[target_nuc]
 
-                        matrix[k, i] += \
-                            nuc.branching_ratio[j] * decay_constant
+                        matrix[k, i] += nuc.branching_ratio[j] * decay_constant
 
             if nuc.name in rates.nuc_to_ind:
                 # Extract all reactions for this nuclide in this cell
@@ -233,11 +232,9 @@ class DepletionChain(object):
                                 l = self.nuclide_dict[self.yields.name[k]]
                                 # Todo energy
                                 matrix[l, i] += \
-                                    self.yields.fis_yield_data[k, 0, m] * \
-                                    path_rate
+                                    self.yields.fis_yield_data[k, 0, m] * path_rate
 
-        # Use DOK matrix as intermediate representation, then convert to CSR and
-        # return
+        # Use DOK matrix as intermediate representation, then convert to CSR and return
         matrix_dok = sp.dok_matrix((self.n_nuclides, self.n_nuclides))
         matrix_dok.update(matrix)
         return matrix_dok.tocsr()
@@ -252,7 +249,7 @@ class DepletionChain(object):
 
         Returns
         -------
-        nuclide.Nuclide
+        Nuclide
             Nuclide object that corresponds to ind.
         """
         return self.nuclides[self.nuclide_dict[ind]]
@@ -266,10 +263,8 @@ def matrix_wrapper(input_tuple):
 
     Parameters
     ----------
-    input_tuple : Tuple
-        Index 0 is the chain (depletion_chain.DepletionChain), index 1 is the
-        reaction rate array (reaction_rates.ReactionRates), index 2 is the
-        cell_id.
+    input_tuple : tuple of DepletionChain, ReactionRates, int
+        Index 0 is the chain, index 1 is the reaction rate array, index 2 is the cell_id.
 
     Returns
     -------

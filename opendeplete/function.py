@@ -18,18 +18,18 @@ class Operator:
     ----------
     geometry : openmc.Geometry
         The OpenMC geometry object.
-    volume : OrderedDict[float]
+    volume : OrderedDict of int to float
         Given a material ID, gives the volume of said material.
-    materials : openmc_wrapper.Materials
+    materials : Materials
         Materials to be used for this simulation.
-    settings : openmc_wrapper.Settings
+    settings : Settings
         Settings object.
 
     Attributes
     ----------
-    geometry : openmc_wrapper.Geometry
+    geometry : Geometry
         The OpenMC geometry object.
-    settings : openmc_wrapper.Settings
+    settings : Settings
         Settings object.
     """
 
@@ -46,21 +46,23 @@ class Operator:
 
     @property
     def chain(self):
-        """depletion_chain.DepletionChain:
-            The depletion chain from the geometry inside."""
+        """DepletionChain
+            The depletion chain from the geometry inside.
+        """
 
         return self.geometry.chain
 
     @property
     def reaction_rates(self):
-        """reaction_rates.ReactionRates:
-            Reaction rates from the geometry inside."""
+        """ReactionRates
+            Reaction rates from the geometry inside.
+        """
 
         return self.geometry.reaction_rates
 
     @property
     def total_number(self):
-        """OrderedDict[int : OrderedDict[str : float]]:
+        """OrderedDict of int to OrderedDict of str to float
             Total atoms for the problem.  Indexed by [cell_id]["nuclide name"].
         """
 
@@ -68,8 +70,8 @@ class Operator:
 
     @property
     def burn_list(self):
-        """burn_list : List[int]
-        A list of all cell IDs to be burned.  Used for sorting the simulation.
+        """list of int
+            A list of all cell IDs to be burned.  Used for sorting the simulation.
         """
 
         return self.geometry.burn_list
@@ -79,7 +81,7 @@ class Operator:
 
         Returns
         -------
-        List[numpy.array]
+        list of numpy.array
             Total density for initial conditions.
         """
 
@@ -93,7 +95,7 @@ class Operator:
 
         Parameters
         ----------
-        total_density : list[numpy.array]
+        total_density : list of numpy.array
             Total atoms.
 
         Todo
@@ -109,12 +111,12 @@ class Operator:
 
         Parameters
         ----------
-        vec : list[np.array]
+        vec : list of numpy.array
             Total atoms to be used in function.
 
         Returns
         -------
-        mat : list[csr_matrix]
+        mat : list of scipy.sparse.csr_matrix
             Matrices for the next step.
         k : float
             Eigenvalue of the problem.
@@ -145,6 +147,15 @@ class Operator:
 
     def get_results_info(self):
         """ Returns non-participating nuclides, cell lists, and nuc lists.
+
+        Returns
+        -------
+        nuc_list : list of str
+            A list of all nuclide names. Used for sorting the simulation.
+        burn_list : list of int
+            A list of all cell IDs to be burned.  Used for sorting the simulation.
+        not_participating : dict of str to dict of str to float
+            Not participating nuclides, indexed by cell id and nuclide id.
 
         """
 
