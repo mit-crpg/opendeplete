@@ -21,7 +21,7 @@ settings = opendeplete.Settings()
 settings.chain_file = "../chains/chain_simple.xml"
 settings.openmc_call = "openmc"
 # An example for mpiexec:
-# settings.openmc_call = ["mpiexec", "/home/cjosey/code/openmc/bin/openmc"]
+# settings.openmc_call = ["mpiexec", "openmc"]
 settings.particles = 1000
 settings.batches = 100
 settings.inactive = 40
@@ -33,7 +33,8 @@ settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 
-op = opendeplete.Operator(geometry, volume, materials, settings)
+op = opendeplete.Operator()
+op.geometry_fill(geometry, volume, materials, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
 opendeplete.integrate(op, opendeplete.ce_cm_c1)

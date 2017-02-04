@@ -229,7 +229,7 @@ class Results(object):
 
         handle.create_dataset("seeds", (0, n_stages), maxshape=(None, n_stages), dtype='int64')
 
-        handle.create_dataset("time", (0, 2), maxshape=(None, 2), dtype='int64')
+        handle.create_dataset("time", (0, 2), maxshape=(None, 2), dtype='float64')
 
     def to_hdf5(self, handle, index):
         """ Converts results object into an hdf5 object.

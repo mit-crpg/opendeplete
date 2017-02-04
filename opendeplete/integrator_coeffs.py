@@ -62,9 +62,9 @@ predictor_c0.d[0, 0] = 1
 predictor_c0.p = np.zeros((2, 2))
 # y0 terms
 predictor_c0.p[0, 0] = 1
-predictor_c0.p[1, 0] = 0
+predictor_c0.p[1, 0] = -1
 # y1 terms
-predictor_c0.p[0, 1] = -1
+predictor_c0.p[0, 1] = 0
 predictor_c0.p[1, 1] = 1
 predictor_c0.final_ind = 1
 predictor_c0.p_terms = 2
