@@ -275,6 +275,7 @@ class Geometry:
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name, settings.power)
+
         time_unpack = time.time()
         os.remove(statepoint_name)
 
@@ -578,7 +579,7 @@ class Geometry:
         """
         statepoint = openmc.StatePoint(filename)
 
-        k = statepoint.k_combined[0]
+        k_combined = statepoint.k_combined[0]
 
         # Generate new power dictionary
 
@@ -636,7 +637,7 @@ class Geometry:
 
         self.reaction_rates[:, :, :] *= (new_power / original_power)
 
-        return k
+        return k_combined
 
     def load_participating(self, filename):
         """ Loads a cross_sections.xml file to find participating nuclides.

@@ -3,9 +3,14 @@
 Contains results generation and saving capabilities.
 """
 
-import lzma
+from collections import OrderedDict
+
 import numpy as np
-import dill
+import h5py
+
+from .reaction_rates import ReactionRates
+
+RESULTS_VERSION = 1
 
 class Results(object):
     """
@@ -22,12 +27,14 @@ class Results(object):
         Number of cells.
     n_nuc : int
         Number of nuclides.
-    p_order : int
+    p_terms : int
         Polynomial order.
     rates : List[reaction_rates.ReactionRates]
         The reaction rates for each substep.
     volume : OrderedDict[float]
         Dictionary mapping cell id to volume.
+    final_stage : Ind
+        Index of final stage
     cell_to_ind : OrderedDict[int]
         A dictionary mapping cell ID as string to index.
     nuc_to_ind : OrderedDict[int]
@@ -37,19 +44,38 @@ class Results(object):
         nuclide.
     """
 
-    def __init__(self, op, p_order):
-        self.k = []
-        self.seeds = []
-        self.time = []
-        self.p_order = p_order
-        self.rates = []
-        self.volume = op.geometry.volume
+    def __init__(self):
+        self.k = None
+        self.seeds = None
+        self.time = None
+        self.p_terms = None
+        self.rates = None
+        self.volume = None
+        self.final_stage = None
 
-        # Get mapping dictionaries from op
-        self.cell_to_ind, self.nuc_to_ind = get_dict(op.total_number)
+        self.cell_to_ind = None
+        self.nuc_to_ind = None
+
+        self.data = None
+
+    def allocate(self, operator, p_terms):
+        """ Allocates memory of Results.
+
+        Parameters
+        ----------
+        operator : function.Function
+            The operator used to generate these results.
+        p_terms : Int
+            Terms of polynomial.
+        """
+        self.p_terms = p_terms
+        self.volume = operator.geometry.volume
+
+        # Get mapping dictionaries from operator
+        self.cell_to_ind, self.nuc_to_ind = get_dict(operator.total_number, operator.burn_list)
 
         # Create polynomial storage array
-        self.data = np.zeros((self.n_cell, self.n_nuc, self.p_order))
+        self.data = np.zeros((self.n_cell, self.n_nuc, self.p_terms))
 
     @property
     def n_cell(self):
@@ -129,7 +155,203 @@ class Results(object):
 
         return np.polynomial.polynomial.polyval(time_unitless, self[cell, nuc])
 
-def get_dict(nested_dict):
+    def create_hdf5(self, handle):
+        """ Creates file structure for a blank HDF5 file.
+
+        Parameters
+        ----------
+        handle
+            An hdf5 file or group type to store this in.
+        """
+
+        # Create and save the 5 dictionaries:
+        # quantities
+        #   self.cell_to_ind -> self.volume (TODO: support for changing volumes)
+        #   self.nuc_to_ind
+        # reactions
+        #   self.rates[0].nuc_to_ind (can be different from above, above is superset)
+        #   self.rates[0].react_to_ind
+        # these are shared by every step of the simulation, and should be deduplicated.
+
+        # Store concentration cell and nuclide dictionaries (along with volumes)
+
+        handle.create_dataset("version", data=RESULTS_VERSION)
+        handle.create_dataset("final index", data=self.final_stage)
+
+        cell_list = sorted(self.cell_to_ind.keys())
+        nuc_list = sorted(self.nuc_to_ind.keys())
+        rxn_list = sorted(self.rates[0].react_to_ind.keys())
+
+        n_cells = len(cell_list)
+        n_nuc_number = len(nuc_list)
+        n_nuc_rxn = len(self.rates[0].nuc_to_ind)
+        n_rxn = len(rxn_list)
+        p_terms = self.p_terms
+        n_stages = len(self.rates)
+
+        cell_group = handle.create_group("cells")
+
+        for cell in cell_list:
+            cell_single_group = cell_group.create_group(cell)
+            cell_single_group.attrs["index"] = self.cell_to_ind[cell]
+            cell_single_group.attrs["volume"] = self.volume[int(cell)]
+
+        nuc_group = handle.create_group("nuclides")
+
+        for nuc in nuc_list:
+            nuc_single_group = nuc_group.create_group(nuc)
+            nuc_single_group.attrs["atom number index"] = self.nuc_to_ind[nuc]
+            if nuc in self.rates[0].nuc_to_ind:
+                nuc_single_group.attrs["reaction rate index"] = self.rates[0].nuc_to_ind[nuc]
+
+        rxn_group = handle.create_group("reactions")
+
+        for rxn in rxn_list:
+            rxn_single_group = rxn_group.create_group(rxn)
+            rxn_single_group.attrs["index"] = self.rates[0].react_to_ind[rxn]
+
+        # Construct array storage
+
+        handle.create_dataset("number", (0, n_cells, n_nuc_number, p_terms),
+                              maxshape=(None, n_cells, n_nuc_number, p_terms),
+                              compression="gzip",
+                              shuffle=True,
+                              dtype='float64')
+
+        handle.create_dataset("reaction rates", (0, n_stages, n_cells, n_nuc_rxn, n_rxn),
+                              maxshape=(None, n_stages, n_cells, n_nuc_rxn, n_rxn),
+                              compression="gzip",
+                              shuffle=True,
+                              dtype='float64')
+
+        handle.create_dataset("eigenvalues", (0, n_stages),
+                              maxshape=(None, n_stages), dtype='float64')
+
+        handle.create_dataset("seeds", (0, n_stages), maxshape=(None, n_stages), dtype='int64')
+
+        handle.create_dataset("time", (0, 2), maxshape=(None, 2), dtype='int64')
+
+    def to_hdf5(self, handle, index):
+        """ Converts results object into an hdf5 object.
+
+        Parameters
+        ----------
+        handle
+            An hdf5 file or group type to store this in.
+        index : Int
+            What step is this?
+        """
+
+        if "/number" not in handle:
+            self.create_hdf5(handle)
+
+        # Grab handles
+        number_dset = handle["/number"]
+        rxn_dset = handle["/reaction rates"]
+        eigenvalues_dset = handle["/eigenvalues"]
+        seeds_dset = handle["/seeds"]
+        time_dset = handle["/time"]
+
+        # Get number of results stored
+        number_shape = list(number_dset.shape)
+        number_results = number_shape[0]
+
+        if number_results < index:
+            # Extend first dimension by 1
+            number_shape[0] = index
+            number_dset.resize(number_shape)
+
+            rxn_shape = list(rxn_dset.shape)
+            rxn_shape[0] = index
+            rxn_dset.resize(rxn_shape)
+
+            eigenvalues_shape = list(eigenvalues_dset.shape)
+            eigenvalues_shape[0] = index
+            eigenvalues_dset.resize(eigenvalues_shape)
+
+            seeds_shape = list(seeds_dset.shape)
+            seeds_shape[0] = index
+            seeds_dset.resize(seeds_shape)
+
+            time_shape = list(time_dset.shape)
+            time_shape[0] = index
+            time_dset.resize(time_shape)
+
+        # Add data
+        n_stages = len(self.rates)
+        number_dset[index-1, :, :, :] = self.data
+        for i in range(n_stages):
+            rxn_dset[index-1, i, :, :, :] = self.rates[i].rates
+        eigenvalues_dset[index-1, :] = self.k
+        seeds_dset[index-1, :] = self.seeds
+        time_dset[index-1, :] = self.time
+
+    def from_hdf5(self, handle, index):
+        """ Loads results object from HDF5.
+
+        Parameters
+        ----------
+        handle
+            An hdf5 file or group type to load from.
+        index : Int
+            What step is this?
+        """
+
+        # Get final stage
+        self.final_stage = handle["/final index"].value
+
+        # Grab handles
+        number_dset = handle["/number"]
+        rxn_dset = handle["/reaction rates"]
+        eigenvalues_dset = handle["/eigenvalues"]
+        seeds_dset = handle["/seeds"]
+        time_dset = handle["/time"]
+
+        self.data = number_dset[index, :, :, :]
+        self.k = eigenvalues_dset[index, :]
+        self.seeds = seeds_dset[index, :]
+        self.time = time_dset[index, :]
+        self.p_terms = number_dset.shape[3]
+        n_stages = rxn_dset.shape[1]
+
+        # Reconstruct dictionaries
+        self.volume = OrderedDict()
+        self.cell_to_ind = OrderedDict()
+        self.nuc_to_ind = OrderedDict()
+        rxn_nuc_to_ind = OrderedDict()
+        rxn_to_ind = OrderedDict()
+
+        for cell in handle["/cells"]:
+            cell_handle = handle["/cells/" + cell]
+            vol = cell_handle.attrs["volume"]
+            ind = cell_handle.attrs["index"]
+
+            self.volume[cell] = vol
+            self.cell_to_ind[cell] = ind
+
+        for nuc in handle["/nuclides"]:
+            nuc_handle = handle["/nuclides/" + nuc]
+            ind_atom = nuc_handle.attrs["atom number index"]
+            self.nuc_to_ind[nuc] = ind_atom
+
+            if "reaction rate index" in nuc_handle.attrs:
+                rxn_nuc_to_ind[nuc] = nuc_handle.attrs["reaction rate index"]
+
+        for rxn in handle["/reactions"]:
+            rxn_handle = handle["/reactions/" + rxn]
+            rxn_to_ind[rxn] = rxn_handle.attrs["index"]
+
+        self.rates = []
+        # Reconstruct reactions
+        for i in range(n_stages):
+            rate = ReactionRates(self.cell_to_ind, rxn_nuc_to_ind, rxn_to_ind)
+
+            rate.rates = handle["/reaction rates"][index, i, :, :, :]
+            self.rates.append(rate)
+
+
+
+def get_dict(nested_dict, burn_list):
     """ Given an operator nested dictionary, output indexing dictionaries.
 
     These indexing dictionaries map cell IDs and nuclide names to indices
@@ -140,6 +362,8 @@ def get_dict(nested_dict):
     nested_dict : OrderedDict[OrderedDict[Float]]
         Dictionary with first index corresponding to cell, second corresponding
         to nuclide, maps to total atom quantity.
+    burn_list : List[int]
+        A list of all cell IDs to be burned.
 
     Returns
     -------
@@ -153,129 +377,77 @@ def get_dict(nested_dict):
     unique_nuc = set()
 
     for cell_id in nested_dict:
-        for nuc in nested_dict[cell_id]:
-            unique_nuc.add(nuc)
+        if cell_id in burn_list:
+            for nuc in nested_dict[cell_id]:
+                unique_nuc.add(nuc)
 
     # Now, form cell_to_ind, nuc_to_ind
-    cell_to_ind = {str(cell_id): i for i, cell_id in enumerate(nested_dict)}
+    cell_to_ind = OrderedDict()
+    for i, cell_id in enumerate(nested_dict):
+        if cell_id in burn_list:
+            cell_to_ind[str(cell_id)] = i
 
-    nuc_to_ind = {nuc: i for i, nuc in enumerate(unique_nuc)}
+    nuc_to_ind = OrderedDict()
+    for i, nuc in enumerate(unique_nuc):
+        nuc_to_ind[nuc] = i
 
     return cell_to_ind, nuc_to_ind
 
-def write_results(results, ind):
-    """ Outputs results to a .pkl file.
+def write_results(result, filename, index):
+    """ Outputs result to an .hdf5 file.
 
     Parameters
     ----------
-    results : Results
+    result : Results
         Object to be stored in a file.
-    ind : Int
-        Integer corresponding to file name ("step" + ind + ".pklz")
+    filename : String
+        Target filename, without extension.
+    index : Int
+        What step is this?
     """
 
-    # dill results
-    output = lzma.open('step' + str(ind) + '.pklz', 'wb')
+    if index == 1:
+        file = h5py.File(filename + ".h5", "w")
+    else:
+        file = h5py.File(filename + ".h5", "a")
 
-    dill.dump(results, output)
+    result.to_hdf5(file, index)
 
-    output.close()
+    file.close()
 
 
 def read_results(filename):
-    """ Reads out a results object from a compressed file.
+    """ Reads out a list of results objects from an hdf5 file.
 
     Parameters
     ----------
     filename : str
-        The filename to read from.
+        The filename to read from, without extension.
 
     Returns
     -------
-    results : Results
-        The result object encapsulated.
+    results : List[Results]
+        The result objects.
     """
 
-    # Undill results
-    handle = lzma.open(filename, 'rb')
+    file = h5py.File(filename + ".h5", "r")
 
-    results = dill.load(handle)
+    assert file["/version"].value == RESULTS_VERSION
 
-    handle.close()
+    # Grab handles
+    number_dset = file["/number"]
+
+    # Get number of results stored
+    number_shape = list(number_dset.shape)
+    number_results = number_shape[0]
+
+    results = []
+
+    for i in range(number_results):
+        result = Results()
+        result.from_hdf5(file, i)
+        results.append(result)
+
+    file.close()
 
     return results
-
-def evaluate_result_list(results, n_points, use_interpolation=True):
-    """ Evaluates all nuclides in all cells using a given results list.
-
-    Parameters
-    ----------
-    results : List[Results]
-        The results to extract data from.  Must be sorted and continuous.
-    n_points : Int
-        Number of points, equally spaced, to evaluate on.
-    use_interpolation : Bool
-        Whether or not to use the algorithm-defined interpolation.
-        n_points will be ignored.
-
-    Returns
-    -------
-    time : np.array
-        Time vector.
-    concentration : Dict[Dict[np.array]]
-        Nested dictionary (indexed by cell, then nuclide) containing values.
-    """
-
-    cell_to_ind = results[0].cell_to_ind
-    nuc_to_ind = results[0].nuc_to_ind
-
-    if use_interpolation:
-        # Get time vector
-        time_final = results[-1].time[1]
-
-        time = np.linspace(0, time_final, n_points)
-
-        concentration = {}
-
-        for cell in cell_to_ind:
-            concentration[cell] = {}
-            for nuc in nuc_to_ind:
-                concentration[cell][nuc] = np.zeros(n_points)
-
-
-                # Evaluate value in each region
-                for res_i, result in enumerate(results):
-                    ind1 = np.argmax(time >= result.time[0])
-                    ind2 = np.argmax(time >= result.time[1])
-
-                    if res_i == len(results) - 1:
-                        ind2 = len(time)
-
-                    concentration[cell][nuc][ind1:ind2] = \
-                        result.evaluate(cell, nuc, time[ind1:ind2])
-    else:
-        n_points = len(results) + 1
-        time = np.zeros(n_points)
-        concentration = {}
-
-        for cell in cell_to_ind:
-            concentration[cell] = {}
-            for nuc in nuc_to_ind:
-                concentration[cell][nuc] = np.zeros(n_points)
-
-                i = 0
-
-                # Evaluate value in each region
-                for result in results:
-
-                    time[i] = result.time[0]
-                    time[i + 1] = result.time[1]
-
-                    poly = result[cell, nuc]
-
-                    concentration[cell][nuc][i] = poly[0]
-                    concentration[cell][nuc][i + 1] = np.sum(poly)
-
-                    i += 1
-
-    return time, concentration

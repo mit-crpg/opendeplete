@@ -66,6 +66,14 @@ class Operator:
 
         return self.geometry.total_number
 
+    @property
+    def burn_list(self):
+        """burn_list : List[int]
+        A list of all cell IDs to be burned.  Used for sorting the simulation.
+        """
+
+        return self.geometry.burn_list
+
     def start(self):
         """ Creates initial files, and returns initial vector.
 

@@ -98,7 +98,7 @@ def integrate(operator, coeffs):
             f.append(mat)
             eigvls.append(eigvl)
             seeds.append(seed)
-            rates_array.append(rates)
+            rates_array.append(copy.deepcopy(rates))
 
             # Compute next x
             x_next = compute_x(coeffs, f, x, dt, s)
@@ -122,7 +122,7 @@ def integrate(operator, coeffs):
             f.append(mat)
             eigvls.append(eigvl)
             seeds.append(seed)
-            rates_array.append(rates)
+            rates_array.append(copy.deepcopy(rates))
 
             # Compute next x
             x_next = compute_x(coeffs, f, x, dt, s)
@@ -135,15 +135,14 @@ def integrate(operator, coeffs):
 
         # Compute interpolating polynomials, fill in results
         results = compute_results(operator, coeffs, x)
-        if len(eigvls) == 1:
-            results.k = [eigvls[0]]
-        else:
-            results.k = [eigvls[0], eigvls[coeffs.final_ind]]
+
+        results.final_stage = coeffs.final_ind
+        results.k = eigvls
         results.seeds = seeds
         results.time = [current_time, current_time + dt]
         results.rates = rates_array
 
-        write_results(results, step_ind)
+        write_results(results, "results", step_ind)
 
         # Compute next time step and store values if FSAL
         current_time += dt
@@ -292,7 +291,8 @@ def compute_results(op, coeffs, x):
     """
 
     # Create results
-    results = Results(op, coeffs.p_terms)
+    results = Results()
+    results.allocate(op, coeffs.p_terms)
 
     # Get indexing terms
     nuc_list, burn_list, non_participating = op.get_results_info()

@@ -1,23 +1,51 @@
 """An example file showing how to plot data from a simulation."""
 
 import matplotlib.pyplot as plt
-import numpy as np
 
-from opendeplete import load_directory, evaluate_result_list
+from opendeplete import read_results, \
+                        evaluate_single_nuclide, \
+                        evaluate_reaction_rate, \
+                        evaluate_eigenvalue
 
 # Set variables for where the data is, and what we want to read out.
 result_folder = "test"
 
 # Load data
-results = load_directory(result_folder)
+results = read_results(result_folder + "/results")
 
-x, y = evaluate_result_list(results, 0, use_interpolation=False)
+cell = "10004"
+nuc = "Gd157"
+rxn = "(n,gamma)"
 
-# Plot data
-plt.semilogy(x, y["10004"]["Gd157"], label="Pointwise")
-x, y = evaluate_result_list(results, 1000, use_interpolation=True)
+# Total number of nuclides
+plt.figure()
+# Pointwise data
+x, y = evaluate_single_nuclide(results, 0, cell, nuc, use_interpolation=False)
+plt.semilogy(x, y, label="Pointwise")
 
-# Plot data
-plt.semilogy(x, y["10004"]["Gd157"], label="C1 Continuous")
+# Interpolated data
+x, y = evaluate_single_nuclide(results, 1000, cell, nuc, use_interpolation=True)
+plt.semilogy(x, y, label="C1 Continuous")
+
 plt.legend(loc="best")
-plt.savefig("interp.pdf")
+plt.xlabel("Time, s")
+plt.ylabel("Total Number")
+plt.savefig("number.pdf")
+
+# Reaction rate
+plt.figure()
+x, y = evaluate_reaction_rate(results, cell, nuc, rxn)
+plt.plot(x, y)
+plt.xlabel("Time, s")
+plt.ylabel("Reaction Rate, 1/s")
+
+plt.savefig("rate.pdf")
+
+# Eigenvalue
+plt.figure()
+x, y = evaluate_eigenvalue(results)
+plt.plot(x, y)
+plt.xlabel("Time, s")
+plt.ylabel("Eigenvalue")
+
+plt.savefig("eigvl.pdf")

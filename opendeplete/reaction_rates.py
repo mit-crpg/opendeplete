@@ -34,7 +34,7 @@ class ReactionRates(object):
         Number of nucs.
     n_react : int
         Number of reactions.
-    rates : np.array
+    rates : numpy.array
         Array storing rates indexed by the above dictionaries.
     """
 
@@ -59,7 +59,7 @@ class ReactionRates(object):
 
         Returns
         -------
-        np.array
+        numpy.array
             The value indexed from self.rates.
         """
 
