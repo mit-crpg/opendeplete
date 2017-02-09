@@ -11,7 +11,7 @@ import numpy as np
 import scipy
 import scipy.stats
 
-import results
+from .results import read_results
 
 
 def get_eigval(directory):
@@ -49,7 +49,7 @@ def get_eigval(directory):
             ind = int(name[0][4::])
 
             # Read file
-            result = results.read_results(directory + '/' + file)
+            result = read_results(directory + '/' + file)
 
             # Extract results
             val[ind] = result.k
@@ -109,7 +109,7 @@ def get_eigval_average(dir_list):
                     continue
 
                 # Read file
-                result = results.read_results(directory + '/' + file)
+                result = read_results(directory + '/' + file)
 
                 # Extract results
                 val[ind, i] = result.k
@@ -169,7 +169,7 @@ def get_atoms(directory, cell_list, nuc_list):
             ind = int(name[0][4::])
 
             # Read file
-            result = results.read_results(directory + '/' + file)
+            result = read_results(directory + '/' + file)
 
             for cell in cell_list:
                 if str(cell) in result.num[0].cell_to_ind:
@@ -219,7 +219,7 @@ def get_atoms_volaveraged(directory, cell_list, nuc_list):
 
     # Calculate volume of cell_list
     # Load first result
-    result_0 = results.read_results(directory + '/step0.pklz')
+    result_0 = read_results(directory + '/step0.pklz')
     vol = 0.0
     for cell in cell_list:
         if cell in result_0.volume:
@@ -233,7 +233,7 @@ def get_atoms_volaveraged(directory, cell_list, nuc_list):
             ind = int(name[0][4::])
 
             # Read file
-            result = results.read_results(directory + '/' + file)
+            result = read_results(directory + '/' + file)
 
             for cell in cell_list:
                 if str(cell) in result.num[0].cell_to_ind:
@@ -291,7 +291,7 @@ def get_reaction_rate(directory, cell_list, nuc_list, reaction):
             ind = int(name[0][4::])
 
             # Read file
-            result = results.read_results(directory + '/' + file)
+            result = read_results(directory + '/' + file)
 
             for cell in cell_list:
                 if str(cell) in result.num[0].cell_to_ind:

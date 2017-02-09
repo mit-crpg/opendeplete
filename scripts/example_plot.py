@@ -3,7 +3,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import utilities
+from opendeplete import get_atoms_volaveraged
 
 
 # Installation Folder
@@ -30,7 +30,7 @@ cells = [x for x in range(10004, 10000+9*8*5, 9)]
 nuclides = ['Xe135', 'U235', 'Gd157']
 
 # Load data
-x, y = utilities.get_atoms_volaveraged(result_folder, cells, nuclides)
+x, y = get_atoms_volaveraged(result_folder, cells, nuclides)
 
 # Plot data
 plt.semilogy(x, y['Gd157'])

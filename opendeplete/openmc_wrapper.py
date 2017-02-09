@@ -3,16 +3,21 @@
 This module implements the OpenDeplete -> OpenMC linkage.
 """
 
-import os
-import time
-from subprocess import call
 from collections import OrderedDict
+import concurrent.futures
+import os
+import random
+from subprocess import call
+import sys
+import time
+import xml.etree.ElementTree as ET
 
 import numpy as np
-
 import openmc
-import reaction_rates
-import depletion_chain
+from openmc.stats import Box
+
+from .depletion_chain import matrix_wrapper
+from .reaction_rates import ReactionRates
 
 
 class Settings:
@@ -213,10 +218,10 @@ class Geometry:
         self.load_participating(self.materials.cross_sections)
 
         # Create reaction rate tables
-        self.reaction_rates = \
-            reaction_rates.ReactionRates(self.burn_mat_to_ind,
-                                         self.burn_nuc_to_ind,
-                                         self.chain.react_to_ind)
+        self.reaction_rates = ReactionRates(
+            self.burn_mat_to_ind,
+            self.burn_nuc_to_ind,
+            self.chain.react_to_ind)
 
         # Finally, calculate total number densities
         self.total_number = OrderedDict()
@@ -336,9 +341,6 @@ class Geometry:
         ----
             Rewrite to generalize source box.
         """
-        import random
-        import sys
-        from openmc.stats import Box
 
         batches = settings.batches
         inactive = settings.inactive
@@ -416,7 +418,6 @@ class Geometry:
         ----
             Generalize method away from process parallelism.
         """
-        import concurrent.futures
 
         # An issue with concurrent.futures is that it is far easier to write a
         # map, so I need to concatenate the data into a single variable with
@@ -427,7 +428,7 @@ class Geometry:
             input_list.append((self.chain, self.reaction_rates, mat_ind))
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(depletion_chain.matrix_wrapper, input_list)
+            matrices = executor.map(matrix_wrapper, input_list)
 
         return list(matrices)
 
@@ -622,7 +623,6 @@ class Geometry:
         filename : str
             Path to cross_sections.xml
         """
-        import xml.etree.ElementTree as ET
 
         # Reads cross_sections.xml to create a dictionary containing
         # participating (burning and not just decaying) nuclides.

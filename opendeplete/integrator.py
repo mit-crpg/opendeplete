@@ -14,7 +14,7 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
-from results import write_results
+from .results import write_results
 
 
 def predictor(operator):
@@ -42,9 +42,8 @@ def predictor(operator):
     vec = operator.start()
 
     current_time = 0.0
-    ind = 0
 
-    for dt in operator.settings.dt_vec:
+    for ind, dt in enumerate(operator.settings.dt_vec):
         # Evaluate function at vec to get mat
         mat, eigvl, rates_1, seed = operator.eval(vec)
         write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time, ind)
@@ -52,11 +51,11 @@ def predictor(operator):
         # Update vec with the integrator.
         vec = matexp(mat, vec, dt)
         current_time += dt
-        ind += 1
 
     # Run final simulation
     mat, eigvl, rates_1, seed = operator.eval(vec)
-    write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time, ind)
+    write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time,
+                  len(operator.settings.dt_vec))
 
     # Return to origin
     os.chdir(dir_home)
@@ -91,9 +90,8 @@ def ce_cm(operator):
     vec = operator.start()
 
     current_time = 0.0
-    ind = 0
 
-    for dt in operator.settings.dt_vec:
+    for ind, dt in enumerate(operator.settings.dt_vec):
         # Evaluate function at vec to get mat
         mat, eigvl, rates_1, seed_1 = operator.eval(vec)
 
@@ -109,11 +107,11 @@ def ce_cm(operator):
         # Step a full timestep
         vec = matexp(mat, vec, dt)
         current_time += dt
-        ind += 1
 
     # Run final simulation
     mat, eigvl, rates_1, seed_1 = operator.eval(vec)
-    write_results(operator, eigvl, [vec], [rates_1], [1], [seed_1], current_time, ind)
+    write_results(operator, eigvl, [vec], [rates_1], [1], [seed_1], current_time,
+                  len(operator.settings.dt_vec))
 
     # Return to origin
     os.chdir(dir_home)
@@ -151,18 +149,12 @@ def quadratic(operator):
     # Generate initial conditions
     vec_bos = operator.start()
 
-    # Dummy variables to keep in scope
-    mat_prev = []
-    rates_prev = []
-
     cells = len(vec_bos)
 
     current_time = 0.0
-    ind = 0
 
-    for i in range(len(operator.settings.dt_vec)):
-        dt = operator.settings.dt_vec[i]
-        if i == 0:
+    for ind, dt in enumerate(operator.settings.dt_vec):
+        if ind == 0:
             # Constant Extrapolation
             mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
 
@@ -175,7 +167,7 @@ def quadratic(operator):
             write_results(operator, eigvl, [vec_bos, vec_eos], [rates_1, rates_2],
                           [1/2, 1/2], [seed_1, seed_2], current_time, ind)
 
-            mat_ext = [mat_bos[i] * 1/2 + mat_eos[i] * 1/2
+            mat_ext = [0.5*(mat_bos[i] + mat_eos[i])
                        for i in range(cells)]
             vec_bos = matexp(mat_ext, vec_bos, dt)
 
@@ -184,7 +176,6 @@ def quadratic(operator):
             rates_prev = copy.deepcopy(rates_1)
 
             current_time += dt
-            ind += 1
         else:
             # Constant Extrapolation
             dt_l = operator.settings.dt_vec[i-1]
@@ -201,8 +192,8 @@ def quadratic(operator):
 
             # Store results
             c1 = (-dt**2/(6.0*dt_l*(dt + dt_l)))
-            c2 = (1/2 + dt/(6.0*dt_l))
-            c3 = (1/2 - dt/(6.0*(dt+dt_l)))
+            c2 = (0.5 + dt/(6.0*dt_l))
+            c3 = (0.5 - dt/(6.0*(dt+dt_l)))
             # TODO find an acceptable compromise for AB-AM schemes.
             write_results(operator, eigvl, [vec_bos, vec_eos], [rates_prev, rates_1, rates_2],
                           [c1, c2, c3], [seed_1, seed_2], current_time, ind)
@@ -217,11 +208,11 @@ def quadratic(operator):
             rates_prev = copy.deepcopy(rates_1)
 
             current_time += dt
-            ind += 1
 
     # Run final simulation
     mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
-    write_results(operator, eigvl, [vec_bos], [rates_1], [1], [seed_1], current_time, ind)
+    write_results(operator, eigvl, [vec_bos], [rates_1], [1], [seed_1], current_time,
+                  len(operator.settings.dt_vec))
 
     # Return to origin
     os.chdir(dir_home)

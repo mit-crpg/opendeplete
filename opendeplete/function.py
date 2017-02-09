@@ -4,8 +4,8 @@ This module contains the Operator class, which is then passed to an integrator
 to run a full depletion simulation.
 """
 
-import depletion_chain
-import openmc_wrapper
+from .depletion_chain import DepletionChain
+from .openmc_wrapper import Geometry
 
 
 class Operator:
@@ -35,7 +35,7 @@ class Operator:
 
     def __init__(self, geometry, volume, materials, settings):
         # Form geometry
-        self.geometry = openmc_wrapper.Geometry(geometry, volume, materials)
+        self.geometry = Geometry(geometry, volume, materials)
         self.settings = settings
 
         # Load depletion chain
@@ -131,5 +131,5 @@ class Operator:
 
         # Create a depletion chain object, and then allocate the reaction
         # rate objects
-        self.geometry.chain = depletion_chain.DepletionChain()
+        self.geometry.chain = DepletionChain()
         self.geometry.chain.xml_read(filename)

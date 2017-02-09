@@ -1,12 +1,9 @@
 """An example file showing how to run a simulation."""
 
 import numpy as np
+import opendeplete
 
 import example_geometry
-import integrator
-import function
-import openmc_wrapper
-
 
 # Load geometry from example
 geometry, volume, materials, lower_left, upper_right = example_geometry.generate_problem()
@@ -19,7 +16,7 @@ N = np.floor(dt2/dt1)
 dt = np.repeat([dt1], N)
 
 # Create settings variable
-settings = openmc_wrapper.Settings()
+settings = opendeplete.Settings()
 
 settings.chain_file = "../chains/chain_simple.xml"
 settings.openmc_call = "openmc"
@@ -36,7 +33,7 @@ settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 
-op = function.Operator(geometry, volume, materials, settings)
+op = opendeplete.Operator(geometry, volume, materials, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
-integrator.ce_cm(op)
+opendeplete.ce_cm(op)
