@@ -6,27 +6,27 @@ Just contains a dictionary of np.arrays to store reaction rates.
 import numpy as np
 
 
-class ReactionRates:
+class ReactionRates(object):
     """ The Nuclide class.
 
     Contains everything in a depletion chain relating to a single nuclide.
 
     Parameters
     ----------
-    cell_to_ind : OrderedDict[int]
+    cell_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
-    nuc_to_ind : OrderedDict[int]
+    nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
-    react_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict of str to int
         A dictionary mapping reaction name as string to index.
 
     Attributes
     ----------
-    cell_to_ind : OrderedDict[int]
+    cell_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
-    nuc_to_ind : OrderedDict[int]
+    nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
-    react_to_ind : OrderedDict[int]
+    react_to_ind : OrderedDict of str to int
         A dictionary mapping reaction name as string to index.
     n_cell : int
         Number of cells.
@@ -34,7 +34,7 @@ class ReactionRates:
         Number of nucs.
     n_react : int
         Number of reactions.
-    rates : np.array
+    rates : numpy.array
         Array storing rates indexed by the above dictionaries.
     """
 
@@ -59,7 +59,7 @@ class ReactionRates:
 
         Returns
         -------
-        np.array
+        numpy.array
             The value indexed from self.rates.
         """
 
@@ -99,12 +99,15 @@ class ReactionRates:
 
     @property
     def n_cell(self):
+        """Number of cells."""
         return len(self.cell_to_ind)
 
     @property
     def n_nuc(self):
+        """Number of nucs."""
         return len(self.nuc_to_ind)
 
     @property
     def n_react(self):
+        """Number of reactions."""
         return len(self.react_to_ind)

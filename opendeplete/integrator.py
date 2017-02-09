@@ -14,19 +14,20 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
-from .results import write_results
+from .results import Results, write_results
 
+def integrate(operator, coeffs):
+    """ Performs integration of an operator using the method in coeffs.
 
-def predictor(operator):
-    """ Runs a depletion problem using the predictor algorithm.
-
-    This algorithm uses the beginning-of-timestep reaction rates for the whole
-    timestep.  This is a first order algorithm.
+    This is a general exponential-linear type integrator for depletion.
+    It supports adaptive timestepping, first-same-as-last, and interpolation.
 
     Parameters
     ----------
-    operator : function.Operator
+    operator : Operator
         The operator object to simulate on.
+    coeffs : Integrator
+        Coefficients to use to integrate with.
     """
 
     # Save current directory
@@ -41,182 +42,296 @@ def predictor(operator):
     # Generate initial conditions
     vec = operator.start()
 
+    # Initial configuration
     current_time = 0.0
+    end_time = np.sum(operator.settings.dt_vec)
+    step_ind = 1
 
-    for ind, dt in enumerate(operator.settings.dt_vec):
-        # Evaluate function at vec to get mat
-        mat, eigvl, rates_1, seed = operator.eval(vec)
-        write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time, ind)
+    # Compute initial time step and what stage we should pause on to check
+    # errors before interpolation
+    if operator.settings.tol is not None and coeffs.ats:
+        dt = 3600 # 1 hour
+        int_step = coeffs.ats_ind
+        ats_mode = True
+        tol = operator.settings.tol
+    else:
+        dt = operator.settings.dt_vec[0]
+        int_step = coeffs.final_ind
+        ats_mode = False
 
-        # Update vec with the integrator.
-        vec = matexp(mat, vec, dt)
+    # Storage for fsal capabilities
+    mat_last = []
+    rates_last = []
+    eigvl_last = 0
+    seed_last = 0
+
+    cells = len(vec)
+
+    while current_time < end_time:
+        # Create vectors
+        x = [copy.copy(vec)]
+        f = []
+        seeds = []
+        eigvls = []
+        rates_array = []
+
+        # Ensure timestep does not fall off edge
+        if current_time + dt > end_time:
+            dt = end_time - current_time
+            # Ensure termination in case of roundoff
+            if dt < 1.0e-12 * end_time:
+                break
+
+        # For each component vector
+        for s in range(int_step):
+            # Compute f as needed
+            if step_ind == 1 or not coeffs.fsal or s > 0:
+                mat, eigvl, rates, seed = operator.eval(x[s])
+            else:
+                # Use stored FSAL data
+                mat = mat_last
+                eigvl = eigvl_last
+                rates = rates_last
+                seed = seed_last
+
+            # Store values
+            f.append(mat)
+            eigvls.append(eigvl)
+            seeds.append(seed)
+            rates_array.append(copy.deepcopy(rates))
+
+            # Compute next x
+            x_next = compute_x(coeffs, f, x, dt, s)
+            x.append(x_next)
+
+        # Compute error if needed
+        if ats_mode:
+            relerr = compute_max_relerr(x[coeffs.final_ind], x[coeffs.ats_ind])
+
+            if relerr > tol:
+                # Compute new timestep
+                dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
+                continue
+
+        # Compute rest of stages (for interpolation)
+        for s in range(int_step, coeffs.stages):
+            # Compute f
+            mat, eigvl, rates, seed = operator.eval(x[s])
+
+            # Store values
+            f.append(mat)
+            eigvls.append(eigvl)
+            seeds.append(seed)
+            rates_array.append(copy.deepcopy(rates))
+
+            # Compute next x
+            x_next = compute_x(coeffs, f, x, dt, s)
+            x.append(x_next)
+
+        # Compute point-derivatives of x where known and append
+        for i in range(len(f)):
+            dx = [dt * (f[i][j] * x[i][j]) for j in range(cells)]
+            x.append(dx)
+
+        # Compute interpolating polynomials, fill in results
+        results = compute_results(operator, coeffs, x)
+
+        results.final_stage = coeffs.final_ind
+        results.k = eigvls
+        results.seeds = seeds
+        results.time = [current_time, current_time + dt]
+        results.rates = rates_array
+
+        write_results(results, "results", step_ind)
+
+        # Compute next time step and store values if FSAL
         current_time += dt
+        step_ind += 1
+        vec = copy.deepcopy(x[coeffs.final_ind])
 
-    # Run final simulation
-    mat, eigvl, rates_1, seed = operator.eval(vec)
-    write_results(operator, eigvl, [vec], [rates_1], [1], [seed], current_time,
-                  len(operator.settings.dt_vec))
+        if ats_mode:
+            dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
+
+        if coeffs.fsal:
+            mat_last = copy.deepcopy(f[coeffs.final_ind])
+            eigvl_last = copy.deepcopy(eigvls[coeffs.final_ind])
+            rates_last = copy.deepcopy(rates_array[coeffs.final_ind])
+            seed_last = copy.deepcopy(seeds[coeffs.final_ind])
 
     # Return to origin
     os.chdir(dir_home)
 
+def compute_x(coeffs, f, x, dt, stage):
+    """ Compute sub-vectors x for exponential-linear
 
-def ce_cm(operator):
-    """ Runs a depletion problem using the center-extrapolate / center-midpoint
-    predictor-corrector algorithm.
-
-    This algorithm is a second order algorithm where the predictor algorithm is
-    used to get the midpoint number densities, another function is then run,
-    and the midpoint reaction rates used for the entire timestep.
-
-    Considered a "constant flux" algorithm.
+    This function computes x using the following equation
+    x_s = \sum_{i=1}^s d_{si} e^{h \sum_{j=1}^s a_{sij} F(x_j)} x_i
 
     Parameters
     ----------
-    operator : function.Operator
-        The operator object to simulate on.
+    coeffs : Integrator
+        Coefficients to use in this calculation.
+    f : list of list of scipy.sparse.csr_matrix
+        The depletion matrices.  Indexed [j][cell] using the above equation.
+    x : list of list of numpy.array
+        The prior x vectors.  Indexed [i][cell] using the above equation.
+    dt : Float
+        The current timestep.
+    stage : Int
+        Index s in the above equation
+
+    Returns
+    -------
+    list of numpy.array
+        The next x component for each cell.
     """
 
-    # Save current directory
-    dir_home = os.getcwd()
+    # List for sub-vectors
+    x_sub = []
 
-    # Move to folder
-    os.makedirs(operator.settings.output_dir, exist_ok=True)
+    cells = len(x[0])
 
-    # Change directory
-    os.chdir(operator.settings.output_dir)
+    for i in range(stage + 1):
+        # To save some time, determine if this index i is needed
+        if coeffs.d[stage, i] == 0:
+            continue
+        # Compute matrix sum in exponent
+        mat = compose_matrix(coeffs, f, stage, i)
 
-    # Generate initial conditions
-    vec = operator.start()
+        matrix_exponent = matexp(mat, x[i], dt)
+        x_a = [coeffs.d[stage, i] * matrix_exponent[j] for j in range(cells)]
 
-    current_time = 0.0
+        x_sub.append(x_a)
 
-    for ind, dt in enumerate(operator.settings.dt_vec):
-        # Evaluate function at vec to get mat
-        mat, eigvl, rates_1, seed_1 = operator.eval(vec)
+    return vector_sum(x_sub)
 
-        # Step a half timestep
-        vec_1 = matexp(mat, vec, dt/2)
+def compose_matrix(coeffs, f, stage, i):
+    """ Compute matrix sums for calculation of x
 
-        # Update function using new RNG
-        mat, dummy, rates_2, seed_2 = operator.eval(vec_1)
-
-        write_results(operator, eigvl, [vec, vec_1], [rates_1, rates_2],
-                      [0, 1], [seed_1, seed_2], current_time, ind)
-
-        # Step a full timestep
-        vec = matexp(mat, vec, dt)
-        current_time += dt
-
-    # Run final simulation
-    mat, eigvl, rates_1, seed_1 = operator.eval(vec)
-    write_results(operator, eigvl, [vec], [rates_1], [1], [seed_1], current_time,
-                  len(operator.settings.dt_vec))
-
-    # Return to origin
-    os.chdir(dir_home)
-
-
-def quadratic(operator):
-    """ Runs a depletion problem using a quadratic algorithm.
-
-    This algorithm is a third order algorithm in which a linear extrapolation
-    of reaction rates from the previous timestep are used for prediction, and a
-    quadratic polynomial using previous, current, and predictor reaction rates
-    is used to get the final answer.
-
-    From
-    ----
-        Isotalo, A. E., and P. A. Aarnio. "Higher order methods for burnup
-        calculations with Bateman solutions." Annals of Nuclear Energy 38.9
-        (2011): 1987-1995.
+    This function computes
+    \sum_{j=1}^s a_{sij} F(x_j)
 
     Parameters
     ----------
-    operator : function.Operator
-        The operator object to simulate on.
+    coeffs : Integrator
+        Coefficients to use in this calculation.
+    f : list of list of scipy.sparse.csr_matrix
+        The depletion matrices.  Indexed [j][cell] using the above equation.
+    stage : Int
+        Index s in the above equation.
+    i : Int
+        Index i in the above equation.
+
+    Returns
+    -------
+    list of scipy.sparse.csr_matrix
+        The next matrix.
     """
 
-    # Save current directory
-    dir_home = os.getcwd()
+    mat_final = []
 
-    # Move to folder
-    os.makedirs(operator.settings.output_dir, exist_ok=True)
+    cells = len(f[0])
 
-    # Change directory
-    os.chdir(operator.settings.output_dir)
+    for mat_ind in range(cells):
+        mat = coeffs.a[stage, i, 0] * f[0][mat_ind]
+        for j in range(1, stage + 1):
+            mat += coeffs.a[stage, i, j] * f[j][mat_ind]
+        mat_final.append(mat)
 
-    # Generate initial conditions
-    vec_bos = operator.start()
+    return mat_final
 
-    cells = len(vec_bos)
+def compute_max_relerr(v1, v2):
+    """ Compute the maximum relative error between v1 and v2.
 
-    current_time = 0.0
+    relerr = abs((v1 - v2)/v1)
 
-    for ind, dt in enumerate(operator.settings.dt_vec):
-        if ind == 0:
-            # Constant Extrapolation
-            mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
+    Parameters
+    ----------
+    v1 : list of numpy.array
+        Vector 1 for each cell.
+    v2 : list of numpy.array
+        Vector 2 for each cell.
 
-            # Get EOS
-            vec_eos = matexp(mat_bos, vec_bos, dt)
+    Returns
+    -------
+    relerr : Float
+        Relative error.
+    """
 
-            # Linear Interpolation
-            mat_eos, eigvl, rates_2, seed_2 = operator.eval(vec_eos)
+    relerr = 0.0
 
-            write_results(operator, eigvl, [vec_bos, vec_eos], [rates_1, rates_2],
-                          [1/2, 1/2], [seed_1, seed_2], current_time, ind)
+    cells = len(v1)
 
-            mat_ext = [0.5*(mat_bos[i] + mat_eos[i])
-                       for i in range(cells)]
-            vec_bos = matexp(mat_ext, vec_bos, dt)
+    for i in range(cells):
+        relerr_cell = max(np.abs((v1[i] - v2[i]) / v1[i]))
+        if relerr_cell > relerr:
+            relerr = relerr_cell
+    return relerr
 
-            # Set mat_prev
-            mat_prev = copy.deepcopy(mat_bos)
-            rates_prev = copy.deepcopy(rates_1)
+def compute_results(op, coeffs, x):
+    """ Computes polynomial coefficients and stores into a results type
 
-            current_time += dt
-        else:
-            # Constant Extrapolation
-            dt_l = operator.settings.dt_vec[i-1]
-            mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
+    Computes the polynomial coefficients given by
+    c_i = \sum_{j=1}^n p_{ij} x_{j}
+    where n is the number of components of x
 
-            # Get EOS
-            c1 = (-dt/(2.0 * dt_l))
-            c2 = (1 + dt/(2.0 * dt_l))
-            mat_int = [mat_prev[i]*c1 + mat_bos[i]*c2 for i in range(cells)]
-            vec_eos = matexp(mat_int, vec_bos, dt)
+    Parameters
+    ----------
+    op : Function
+        The operator used to generate these results.
+    coeffs : Integrator
+        Coefficients to use in this calculation.
+    x : list of list of numpy.array
+        The prior x vectors.  Indexed [i][cell] using the above equation.
 
-            # Quadratic Extrapolation
-            mat_eos, eigvl, rates_2, seed_2 = operator.eval(vec_eos)
+    Returns
+    -------
+    results : Results
+        A mostly-filled results object for saving to disk.
+    """
 
-            # Store results
-            c1 = (-dt**2/(6.0*dt_l*(dt + dt_l)))
-            c2 = (0.5 + dt/(6.0*dt_l))
-            c3 = (0.5 - dt/(6.0*(dt+dt_l)))
-            # TODO find an acceptable compromise for AB-AM schemes.
-            write_results(operator, eigvl, [vec_bos, vec_eos], [rates_prev, rates_1, rates_2],
-                          [c1, c2, c3], [seed_1, seed_2], current_time, ind)
+    # Create results
+    results = Results()
+    results.allocate(op, coeffs.p_terms)
 
-            # Get new BOS
-            mat_ext = [mat_prev[i]*c1 + mat_bos[i]*c2 + mat_eos[i]*c3
-                       for i in range(cells)]
-            vec_bos = matexp(mat_ext, vec_bos, dt)
+    # Get indexing terms
+    nuc_list, burn_list, non_participating = op.get_results_info()
 
-            # Set mat_prev
-            mat_prev = copy.deepcopy(mat_bos)
-            rates_prev = copy.deepcopy(rates_1)
+    for mat_i, mat in enumerate(burn_list):
+        mat_str = str(mat)
+        # Compute polynomials
+        n_nuc = len(x[0][mat_i])
 
-            current_time += dt
+        p = np.zeros((n_nuc, coeffs.p_terms))
 
-    # Run final simulation
-    mat_bos, eigvl, rates_1, seed_1 = operator.eval(vec_bos)
-    write_results(operator, eigvl, [vec_bos], [rates_1], [1], [seed_1], current_time,
-                  len(operator.settings.dt_vec))
+        for i in range(coeffs.p_terms):
+            for j in range(coeffs.int_terms):
+                if coeffs.p[i, j] != 0:
+                    p[:, i] += coeffs.p[i, j] * x[j][mat_i]
 
-    # Return to origin
-    os.chdir(dir_home)
+        # Add to results
+        for nuc_i, nuc in enumerate(nuc_list):
+            results[mat_str, nuc] = p[nuc_i, :]
 
+        # Add non-participating
+        for nuc in non_participating[mat]:
+            p_temp = np.zeros(coeffs.p_terms)
+            p_temp[0] = non_participating[mat][nuc]
+
+            results[mat_str, nuc] = p_temp
+
+    return results
+
+def vector_sum(vecs):
+    if vecs == []:
+        return []
+    vec = copy.copy(vecs[0])
+
+    for i in range(1, len(vecs)):
+        for j in range(len(vecs[i])):
+            vec[j] += vecs[i][j]
+
+    return vec
 
 def matexp(mat, vec, dt):
     """ Parallel matrix exponent for a list of mat, vec.
@@ -226,16 +341,16 @@ def matexp(mat, vec, dt):
 
     Parameters
     ----------
-    mat : List[scipy.sparse.csr_matrix]
+    mat : list of scipy.sparse.csr_matrix
         Matrices to take exponent of.
-    vec : List[numpy.array]
+    vec : list of numpy.array
         Vectors to operate a matrix exponent on.
     dt : float
         Time to integrate to.
 
     Returns
     -------
-    List[numpy.array]
+    list of numpy.array
         List of results of the matrix exponent.
     """
 
@@ -263,13 +378,13 @@ def matexp_wrapper(data):
 
     Parameters
     ----------
-    data : Tuple
+    data : tuple of scipy.sparse.csr_matrix, numpy.array, float
         First entry is a csr_matrix, second is the vector, third is the time to
         step to.
 
     Returns
     -------
-    List[numpy.array]
+    list of numpy.array
         List of results of the matrix exponent.
     """
     return CRAM48(data[0], np.array(data[1]), data[2])
@@ -298,7 +413,7 @@ def CRAM16(A, n0, dt):
 
     Returns
     -------
-    np.array
+    numpy.array
         Results of the matrix exponent.
     """
 
@@ -360,7 +475,7 @@ def CRAM48(A, n0, dt):
 
     Returns
     -------
-    np.array
+    numpy.array
         Results of the matrix exponent.
     """
 

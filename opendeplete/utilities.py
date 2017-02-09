@@ -4,301 +4,137 @@ Contains functions that can be used to post-process objects that come out of
 the results module.
 """
 
-import os
-import fnmatch
-
 import numpy as np
-import scipy
-import scipy.stats
 
-from .results import read_results
-
-
-def get_eigval(directory):
-    """ Get eigenvalues as a function of time.
+def evaluate_single_nuclide(results, n_points, cell, nuc, use_interpolation=True):
+    """ Evaluates a single nuclide in a single cell from a results list.
 
     Parameters
     ----------
-    directory : str
-        Directory to read results from.
+    results : list of results
+        The results to extract data from.  Must be sorted and continuous.
+    n_points : int
+        Number of points, equally spaced, to evaluate on.
+    cell : str
+        Cell name to evaluate
+    nuc : str
+        Nuclide name to evaluate
+    use_interpolation : bool
+        Whether or not to use the algorithm-defined interpolation.
+        n_points will be ignored.
 
     Returns
     -------
-    time : np.array
-        Time for each step.
-    val : np.array
-        Eigenvalue for each step.
+    time : numpy.array
+        Time vector.
+    concentration : numpy.array
+        Total number of atoms in the cell.
     """
 
-    # First, calculate how many step files are in the folder
+    if use_interpolation:
+        time_final = results[-1].time[1]
 
-    count = 0
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            count += 1
+        time = np.linspace(0, time_final, n_points)
 
-    # Allocate result
-    val = np.zeros(count)
-    time = np.zeros(count)
+        concentration = np.zeros(n_points)
 
-    # Read in file, get eigenvalue, close file
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            # Get ind (files will be found out of order)
-            name = file.split(".")
-            ind = int(name[0][4::])
+        # Evaluate value in each region
+        for res_i, result in enumerate(results):
+            ind1 = np.argmax(time >= result.time[0])
+            ind2 = np.argmax(time >= result.time[1])
 
-            # Read file
-            result = read_results(directory + '/' + file)
+            if res_i == len(results) - 1:
+                ind2 = len(time)
 
-            # Extract results
-            val[ind] = result.k
-            time[ind] = result.time
-    return time, val
+            concentration[ind1:ind2] = result.evaluate(cell, nuc, time[ind1:ind2])
+    else:
+        n_points = len(results) + 1
+        time = np.zeros(n_points)
+        concentration = np.zeros(n_points)
 
+        # Evaluate value in each region
+        for i, result in enumerate(results):
 
-def get_eigval_average(dir_list):
-    """ Get eigenvalues as a function of time for a set of simulations.
+            time[i] = result.time[0]
+            time[i + 1] = result.time[1]
 
-    This function extracts the eigenvalue from several different simulation
-    directories and merges them together.  It is assumed that each directory
-    was run precisely identically.
+            poly = result[cell, nuc]
+
+            concentration[i] = poly[0]
+            concentration[i + 1] = np.sum(poly)
+
+    return time, concentration
+
+def evaluate_reaction_rate(results, cell, nuc, rxn):
+    """ Evaluates a single nuclide reaction rate in a single cell from a results list.
 
     Parameters
     ----------
-    directory : List[str]
-        List of directories to read from.
+    results : list of Results
+        The results to extract data from.  Must be sorted and continuous.
+    cell : str
+        Cell name to evaluate
+    nuc : str
+        Nuclide name to evaluate
+    rxn : str
+        Reaction rate to evaluate
 
     Returns
     -------
-    time : np.array
-        Time for each step.
-    mu : np.array
-        Eigenvalue average for each step.
-    std_val : np.array
-        Eigenvalue standard deviation for each step.
-    p_value : np.array
-        Shapiro-Wilk p-value
+    time : numpy.array
+        Time vector.
+    rate : numpy.array
+        Reaction rate.
     """
 
-    # First, calculate how many step files are in each folder
+    n_points = len(results) + 1
+    time = np.zeros(n_points)
+    rate = np.zeros(n_points)
 
-    count_list = [0 for directory in dir_list]
-    for i, directory in enumerate(dir_list):
-        for file in os.listdir(directory):
-            if fnmatch.fnmatch(file, 'step*'):
-                count_list[i] += 1
+    ind_final = results[0].final_stage
 
-    # Allocate result
-    count = min(count_list)
-    val = np.zeros((count, len(dir_list)))
-    time = np.zeros(count)
+    # Evaluate value in each region
+    for i, result in enumerate(results):
 
-    # Read in file, get eigenvalue, close file
+        time[i] = result.time[0]
+        time[i + 1] = result.time[1]
 
-    for i, directory in enumerate(dir_list):
-        for file in os.listdir(directory):
-            if fnmatch.fnmatch(file, 'step*'):
-                # Get ind (files will be found out of order)
-                name = file.split(".")
-                ind = int(name[0][4::])
+        poly = result[cell, nuc]
 
-                # Do not extract data past the end of the minimum number of run
-                # steps.
-                if ind >= count:
-                    continue
+        rate[i] = result.rates[0][cell, nuc, rxn] * poly[0]
+        rate[i + 1] = result.rates[ind_final][cell, nuc, rxn] * np.sum(poly)
 
-                # Read file
-                result = read_results(directory + '/' + file)
+    return time, rate
 
-                # Extract results
-                val[ind, i] = result.k
-                time[ind] = result.time
-
-    # Perform statistics on result
-    r_stats = scipy.stats.describe(val, axis=1)
-
-    mu_bar = r_stats.mean
-    std_val = np.sqrt(r_stats.variance) / np.sqrt(len(dir_list))
-    p_val = [scipy.stats.shapiro(b)[1] for b in val]
-
-    return time, mu_bar, std_val, p_val
-
-
-def get_atoms(directory, cell_list, nuc_list):
-    """ Get total atom count as a function of time.
+def evaluate_eigenvalue(results):
+    """ Evaluates the eigenvalue from a results list.
 
     Parameters
     ----------
-    directory : str
-        Directory to read results from.
-    cell_list : List[int]
-        List of cell IDs to extract data from.
-    nuc_list : List[str]
-        List of nuclides to extract data from.
+    results : list of Results
+        The results to extract data from.  Must be sorted and continuous.
 
     Returns
     -------
-    time : np.array
-        Time for each step.
-    val : Dict[Dict[np.array]]
-        Total number of atoms, indexed [cell id : int][nuclide : str]
+    time : numpy.array
+        Time vector.
+    eigenvalue : numpy.array
+        Eigenvalue.
     """
 
-    # First, calculate how many step files are in the folder
+    n_points = len(results) + 1
+    time = np.zeros(n_points)
+    eigenvalue = np.zeros(n_points)
 
-    count = 0
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            count += 1
+    ind_final = results[0].final_stage
 
-    # Allocate result
-    val = {}
-    time = np.zeros(count)
+    # Evaluate value in each region
+    for i, result in enumerate(results):
 
-    for cell in cell_list:
-        val[cell] = {}
-        for nuc in nuc_list:
-            val[cell][nuc] = np.zeros(count)
+        time[i] = result.time[0]
+        time[i + 1] = result.time[1]
 
-    # Read in file, get eigenvalue, close file
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            # Get ind (files will be found out of order)
-            name = file.split(".")
-            ind = int(name[0][4::])
+        eigenvalue[i] = result.k[0]
+        eigenvalue[i + 1] = result.k[ind_final]
 
-            # Read file
-            result = read_results(directory + '/' + file)
-
-            for cell in cell_list:
-                if str(cell) in result.num[0].cell_to_ind:
-                    for nuc in nuc_list:
-                        if nuc in result.num[0].nuc_to_ind:
-                            val[cell][nuc][ind] = result.num[0][str(cell), nuc]
-            time[ind] = result.time
-    return time, val
-
-
-def get_atoms_volaveraged(directory, cell_list, nuc_list):
-    """ Get volume averaged atom count as a function of time.
-
-    This function sums the atom concentration from each cell and then divides
-    by the volume sum.
-
-    Parameters
-    ----------
-    directory : str
-        Directory to read results from.
-    cell_list : List[int]
-        List of cell IDs to average.
-    nuc_list : List[str]
-        List of nuclides to extract data from.
-
-    Returns
-    -------
-    time : np.array
-        Time for each step.
-    val : Dict[np.array]
-        Volume averaged atoms, indexed [nuclide : str]
-    """
-
-    # First, calculate how many step files are in the folder
-
-    count = 0
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            count += 1
-
-    # Allocate result
-    val = {}
-    time = np.zeros(count)
-
-    for nuc in nuc_list:
-        val[nuc] = np.zeros(count)
-
-    # Calculate volume of cell_list
-    # Load first result
-    result_0 = read_results(directory + '/step0.pklz')
-    vol = 0.0
-    for cell in cell_list:
-        if cell in result_0.volume:
-            vol += result_0.volume[cell]
-
-    # Read in file, get eigenvalue, close file
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            # Get ind (files will be found out of order)
-            name = file.split(".")
-            ind = int(name[0][4::])
-
-            # Read file
-            result = read_results(directory + '/' + file)
-
-            for cell in cell_list:
-                if str(cell) in result.num[0].cell_to_ind:
-                    for nuc in nuc_list:
-                        if nuc in result.num[0].nuc_to_ind:
-                            val[nuc][ind] += result.num[0][str(cell), nuc]/vol
-            time[ind] = result.time
-    return time, val
-
-
-def get_reaction_rate(directory, cell_list, nuc_list, reaction):
-    """ Gets the reaction rate.
-
-    The reaction rate is specifically result.rate_bar * result.concentration,
-    as reaction rates are divided by atom density prior to utilization.
-
-    Parameters
-    ----------
-    directory : str
-        Directory to read results from.
-    cell_list : List[int]
-        List of cell IDs to extract data from.
-    nuc_list : List[str]
-        List of nuclides to extract data from.
-
-    Returns
-    -------
-    time : np.array
-        Time for each step.
-    val : Dict[Dict[np.array]]
-        Reaction rate, indexed [cell id : int][nuclide : str]
-    """
-
-    # First, calculate how many step files are in the folder
-
-    count = 0
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            count += 1
-
-    # Allocate result
-    val = {}
-    time = np.zeros(count)
-
-    for cell in cell_list:
-        val[cell] = {}
-        for nuc in nuc_list:
-            val[cell][nuc] = np.zeros(count)
-
-    # Read in file, get eigenvalue, close file
-    for file in os.listdir(directory):
-        if fnmatch.fnmatch(file, 'step*'):
-            # Get ind (files will be found out of order)
-            name = file.split(".")
-            ind = int(name[0][4::])
-
-            # Read file
-            result = read_results(directory + '/' + file)
-
-            for cell in cell_list:
-                if str(cell) in result.num[0].cell_to_ind:
-                    for nuc in nuc_list:
-                        if nuc in result.num[0].nuc_to_ind:
-                            val[cell][nuc][ind] = \
-                                result.num[0][str(cell), nuc] * \
-                                result.rate_bar[str(cell), nuc, reaction]
-            time[ind] = result.time
-    return time, val
+    return time, eigenvalue

@@ -20,7 +20,7 @@ from .depletion_chain import matrix_wrapper
 from .reaction_rates import ReactionRates
 
 
-class Settings:
+class Settings(object):
     """ The Settings class.
 
     This contains the parameters passed to the integrator.  This includes
@@ -51,6 +51,8 @@ class Settings:
         Power of the reactor (currently in MeV/second-cm).
     dt_vec : numpy.array
         Array of time steps to take.
+    tol : float
+        Tolerance for adaptive time stepping.
     output_dir : str
         Path to output directory to save results.
     """
@@ -69,10 +71,11 @@ class Settings:
         # Depletion problem specific
         self.power = None
         self.dt_vec = None
+        self.tol = None
         self.output_dir = None
 
 
-class Materials:
+class Materials(object):
     """The Materials class.
 
     This contains dictionaries indicating which cells are to be filled with
@@ -125,33 +128,37 @@ class Geometry:
         The OpenMC geometry object.
     volume : OrderedDict[float]
         Given a material ID, gives the volume of said material.
-    materials : openmc_wrapper.Materials
+    materials : Materials
         Materials to be used for this simulation.
     seed : int
         The RNG seed used in last OpenMC run.
-    number_density : OrderedDict[OrderedDict[float]]
+    number_density : OrderedDict of int to OrderedDict of str to float
         The number density of a nuclide in a cell.  Indexed as
         number_density[cell ID : int][nuclide : str].
-    total_number : OrderedDict[OrderedDict[float]]
+    total_number : OrderedDict of int to OrderedDict of str to float
         The number density of a nuclide in a cell multiplied by the volume of
         the cell.  Indexed as total_number[cell ID : int][nuclide : str].
-    participating_nuclides : Set[str]
+    participating_nuclides : set of str
         A set listing all unique nuclides available from cross_sections.xml.
-    burn_list : List[int]
+    nuc_list : list of str
+        A list of all nuclide names. Used for sorting the simulation.
+    burn_list : list of int
         A list of all cell IDs to be burned.  Used for sorting the simulation.
-    chain : depletion_chain.DepletionChain
+    chain : DepletionChain
         The depletion chain information necessary to form matrices and tallies.
-    reaction_rates : reaction_rates.ReactionRates
+    reaction_rates : ReactionRates
         Reaction rates from the last operator step.
-    power : OrderedDict[float]
+    power : OrderedDict of str to float
         Cell-by-Cell power.  Indexed by cell ID.
-    mat_name : OrderedDict[str]
+    mat_name : OrderedDict of str to int
         The name of region each cell is set to.  Indexed by cell ID.
-    burn_mat_to_id : OrderedDict[int]
+    burn_mat_to_id : OrderedDict of str to int
         Dictionary mapping material ID (as a string) to an index in reaction_rates.
-    burn_nuc_to_id : OrderedDict[int]
+    burn_nuc_to_id : OrderedDict of str to int
         Dictionary mapping nuclide name (as a string) to an index in
         reaction_rates.
+    n_nuc : int
+        Number of nuclides considered in the decay chain.
     """
 
     def __init__(self, geometry, volume, materials):
@@ -162,6 +169,7 @@ class Geometry:
         self.number_density = OrderedDict()
         self.total_number = None
         self.participating_nuclides = None
+        self.nuc_list = []
         self.burn_list = []
         self.chain = None
         self.reaction_rates = None
@@ -178,7 +186,7 @@ class Geometry:
 
         Parameters
         ----------
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Settings to initialize with.
         """
 
@@ -212,7 +220,7 @@ class Geometry:
                     mat_ind += 1
 
         # Then, write geometry.xml
-        self.geometry.export_to_xml()
+        # self.geometry.export_to_xml()
 
         # Load participating nuclides
         self.load_participating(self.materials.cross_sections)
@@ -232,18 +240,18 @@ class Geometry:
 
         Parameters
         ----------
-        vec : List[numpy.array]
+        vec : list of numpy.array
             Total atoms to be used in function.
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Settings to run the sim with.
 
         Returns
         -------
-        mat : List[scipy.sparse.csr_matrix]
+        mat : list of scipy.sparse.csr_matrix
             Matrices for the next step.
         k : float
             Eigenvalue of the problem.
-        rates : reaction_rates.ReactionRates
+        rates : ReactionRates
             Reaction rates from this simulation.
         seed : int
             Seed for this simulation.
@@ -267,6 +275,7 @@ class Geometry:
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name, settings.power)
+
         time_unpack = time.time()
         os.remove(statepoint_name)
 
@@ -285,7 +294,7 @@ class Geometry:
 
         Returns
         -------
-        list[numpy.array]
+        list of numpy.array
             Total density for initial conditions.
         """
         # Write geometry.xml
@@ -313,8 +322,7 @@ class Geometry:
             for key_nuc in self.number_density[key_mat]:
                 # Check if in participating nuclides
                 if key_nuc in self.participating_nuclides:
-                    mat.add_nuclide(key_nuc, 1.0e-24*self.number_density[
-                        key_mat][key_nuc])
+                    mat.add_nuclide(key_nuc, 1.0e-24*self.number_density[key_mat][key_nuc])
             mat.set_density(units='sum')
 
             if mat_name in self.materials.sab:
@@ -334,7 +342,7 @@ class Geometry:
 
         Parameters
         ----------
-        settings : openmc_wrapper.Settings
+        settings : Settings
             Operator settings configuration.
 
         Todo
@@ -411,7 +419,7 @@ class Geometry:
 
         Returns
         -------
-        List[scipy.sparse.csr_matrix]
+        list of scipy.sparse.csr_matrix
             A list of sparse depletion matrices.
 
         Todo
@@ -454,13 +462,8 @@ class Geometry:
 
         Returns
         -------
-        List[numpy.array]
+        list of numpy.array
             A list of np.arrays containing total atoms of each cell.
-
-        Todo
-        ----
-            Make this method less fragile.  The only thing guaranteeing the
-            order of vectors and matrices is self.burn_list's order.
         """
 
         total_density = []
@@ -471,16 +474,38 @@ class Geometry:
 
             # Get all nuclides that exist in both chain and total_number
             # in the order of chain
-            for i in range(len(self.chain.nuclides)):
-                if self.chain.nuclides[i].name in self.total_number[mat]:
-                    total_density[mat_i].append(
-                        self.total_number[mat][self.chain.nuclides[i].name])
+            for nuc in self.nuc_list:
+                if nuc in self.total_number[mat]:
+                    total_density[mat_i].append(self.total_number[mat][nuc])
                 else:
                     total_density[mat_i].append(0.0)
             # Convert to np.array
             total_density[mat_i] = np.array(total_density[mat_i])
 
         return total_density
+
+    def get_non_participating_nuc(self):
+        """ Returns a nested dictionary of nuclides not participating.
+
+        Returns
+        -------
+        not_participating : dict of str to dict of str to float
+            Not participating nuclides, indexed by cell id and nuclide id.
+
+        """
+
+        not_participating = {}
+
+        for mat in self.burn_list:
+
+            not_participating[mat] = {}
+
+            # Get all nuclides that don't exist in chain but do in total_number
+            for nuc in self.total_number[mat]:
+                if nuc not in self.nuc_list:
+                    not_participating[mat][nuc] = self.total_number[mat][nuc]
+
+        return not_participating
 
     def set_density(self, total_density):
         """ Sets density.
@@ -490,33 +515,29 @@ class Geometry:
 
         Parameters
         ----------
-        total_density : list[numpy.array]
+        total_density : list of numpy.array
             Total atoms.
-
-        Todo
-        ----
-            Make this method less fragile.  The only thing guaranteeing the
-            order of vectors and matrices is self.burn_list's order.
         """
 
         # First, ensure self.total_number is clear
         for mat in self.burn_list:
-            for i in range(len(self.chain.nuclides)):
-                if self.chain.nuclides[i].name in self.total_number[mat]:
-                    self.total_number[mat].pop(self.chain.nuclides[i].name, None)
+            for nuc in self.nuc_list:
+                if nuc in self.total_number[mat]:
+                    self.total_number[mat].pop(nuc, None)
+
 
         for mat_i, mat in enumerate(self.burn_list):
 
             # Update total_number first
-            for i in range(len(self.chain.nuclides)):
+            for i in range(self.n_nuc):
                 # Don't add if zero, for performance reasons.
                 if total_density[mat_i][i] != 0.0:
-                    nuc = self.chain.nuclides[i].name
+                    nuc = self.nuc_list[i]
                     # Add a "infinitely dilute" quantity if negative
                     if total_density[mat_i][i] >= 0.0:
                         self.total_number[mat][nuc] = total_density[mat_i][i]
                     else:
-                        self.total_number[mat][nuc] = 1.0e5
+                        self.total_number[mat][nuc] = 1.0
                         print("WARNING! Negative Number Densities!")
                         print("Material id = ", mat_i, " nuclide ", nuc,
                               " number = ", total_density[mat_i][i])
@@ -525,6 +546,17 @@ class Geometry:
             for nuc in self.total_number[mat]:
                 self.number_density[mat][nuc] = self.total_number[mat][nuc] \
                                                  / self.volume[mat]
+
+    def fill_nuclide_list(self):
+        """ Creates a list of nuclides in the order they will appear in vecs.
+
+        All this is is the name of each nuclide in self.chain.nuclides.
+        """
+
+        self.nuc_list = []
+
+        for nuc in self.chain.nuclides:
+            self.nuc_list.append(nuc.name)
 
     def unpack_tallies_and_normalize(self, filename, new_power):
         """ Unpack tallies from OpenMC
@@ -552,7 +584,7 @@ class Geometry:
         """
         statepoint = openmc.StatePoint(filename)
 
-        k = statepoint.k_combined[0]
+        k_combined = statepoint.k_combined[0]
 
         # Generate new power dictionary
 
@@ -610,7 +642,7 @@ class Geometry:
 
         self.reaction_rates[:, :, :] *= (new_power / original_power)
 
-        return k
+        return k_combined
 
     def load_participating(self, filename):
         """ Loads a cross_sections.xml file to find participating nuclides.
@@ -646,6 +678,11 @@ class Geometry:
                         self.burn_nuc_to_ind[name] = nuc_ind
                         nuc_ind += 1
 
+    @property
+    def n_nuc(self):
+        """Number of nuclides considered in the decay chain."""
+        return len(self.chain.nuclides)
+
 def density_to_mat(dens_dict):
     """ Generates an OpenMC material from a cell ID and self.number_density.
 
@@ -677,10 +714,9 @@ def extract_openmc_materials(cell):
 
     Returns
     -------
-    List[OrderedDict[float]]
+    list of OrderedDict of str to float
         A list of ordered dictionaries containing the nuclides of interest.
-
-    List[int]
+    list of int
         IDs of the materials used.
     """
 

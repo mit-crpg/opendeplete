@@ -23,6 +23,7 @@ Data Classes
    :toctree: generated
    :nosignatures:
 
+   opendeplete.Integrator
    opendeplete.DepletionChain
    opendeplete.Nuclide
    opendeplete.Yield
@@ -36,4 +37,3 @@ Results Classes
 
    opendeplete.Results
    opendeplete.ReactionRates
-   opendeplete.Concentrations
