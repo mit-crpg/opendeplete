@@ -199,9 +199,8 @@ class Geometry:
         mat_ind = 0
 
         # First, for each material, extract number density
-        cells = self.geometry.root_universe.get_all_cells()
-        for cid in cells:
-            cell = cells[cid]
+        cells = self.geometry.get_all_material_cells()
+        for cell in cells:
             name = cell.name
 
             if name == '':
