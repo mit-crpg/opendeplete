@@ -202,11 +202,6 @@ class Geometry:
         cells = self.geometry.get_all_material_cells()
         for cell in cells:
             name = cell.name
-
-            if name == '':
-                # Cell is not "physical", cycle.
-                continue
-
             number_densities, mat_ids = extract_openmc_materials(cell)
 
             for i, mat_id in enumerate(mat_ids):
