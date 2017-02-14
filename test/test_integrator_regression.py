@@ -46,14 +46,14 @@ class TestIntegratorRegression(unittest.TestCase):
 
         tol = 1.0e-13
 
-        self.assertLess(np.abs(y1[1] - s1[0]), tol)
-        self.assertLess(np.abs(y2[1] - s1[1]), tol)
+        self.assertLess(np.absolute(y1[1] - s1[0]), tol)
+        self.assertLess(np.absolute(y2[1] - s1[1]), tol)
 
-        self.assertLess(np.abs(y1[2] - s2[0]), tol)
-        self.assertLess(np.abs(y2[2] - s2[1]), tol)
+        self.assertLess(np.absolute(y1[2] - s2[0]), tol)
+        self.assertLess(np.absolute(y2[2] - s2[1]), tol)
 
         # Delete files
-        os.remove(settings.output_dir + "/results.h5")
+        os.remove(os.path.join(settings.output_dir, "results.h5"))
         os.rmdir(settings.output_dir)
 
 
