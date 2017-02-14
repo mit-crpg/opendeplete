@@ -68,7 +68,14 @@ class DepletionChain(object):
         self.nuclide_dict = OrderedDict()
 
         # Load XML tree
-        root = ET.parse(filename)
+        try:
+            root = ET.parse(filename)
+        except:
+            if filename is None:
+                print("No chain specified, either manually or in environment variable OPENDEPLETE_CHAIN.")
+            else:
+                print("Decay chain \"", filename, "\" is invalid.")
+            exit()
 
         # Read nuclide tables
         decay_node = root.find('decay_constants')
