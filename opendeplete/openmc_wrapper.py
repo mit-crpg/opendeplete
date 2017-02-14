@@ -47,6 +47,11 @@ class Settings(object):
         Coordinate of upper right of bounding box of geometry.
     entropy_dimension : List[int]
         Grid size of entropy.
+    round_number : bool
+        Whether or not to round output to OpenMC to 8 digits.
+        Useful in testing, as OpenMC is incredibly sensitive to exact values.
+    constant_seed : int
+        If present, all runs will be performed with this seed.
     power : float
         Power of the reactor (currently in MeV/second-cm).
     dt_vec : numpy.array
@@ -67,6 +72,10 @@ class Settings(object):
         self.lower_left = None
         self.upper_right = None
         self.entropy_dimension = None
+
+        # OpenMC testing specific
+        self.round_number = False
+        self.constant_seed = None
 
         # Depletion problem specific
         self.power = None
@@ -167,7 +176,7 @@ class Geometry:
         self.materials = materials
         self.seed = 0
         self.number_density = OrderedDict()
-        self.total_number = None
+        self.total_number = OrderedDict()
         self.participating_nuclides = None
         self.nuc_list = []
         self.burn_list = []
@@ -191,11 +200,22 @@ class Geometry:
         """
 
         # Clear out OpenMC
-        openmc.reset_auto_material_id()
-        openmc.reset_auto_surface_id()
-        openmc.reset_auto_cell_id()
-        openmc.reset_auto_universe_id()
+        clean_up_openmc()
 
+        # Extract number densities from geometry
+        self.extract_all_materials()
+
+        # Load participating nuclides
+        self.load_participating()
+
+        # Create reaction rate tables
+        self.initialize_reaction_rates()
+
+        # Finally, calculate total number densities
+        self.calculate_total_number()
+
+    def extract_all_materials(self):
+        """ Iterate through all cells, create number density vectors from mats."""
         mat_ind = 0
 
         # First, for each material, extract number density
@@ -213,23 +233,14 @@ class Geometry:
                     self.burn_mat_to_ind[str(mat_id)] = mat_ind
                     mat_ind += 1
 
-        # Then, write geometry.xml
-        # self.geometry.export_to_xml()
-
-        # Load participating nuclides
-        self.load_participating(self.materials.cross_sections)
-
-        # Create reaction rate tables
+    def initialize_reaction_rates(self):
+        """ Create reaction rates object. """
         self.reaction_rates = ReactionRates(
             self.burn_mat_to_ind,
             self.burn_nuc_to_ind,
             self.chain.react_to_ind)
 
-        # Finally, calculate total number densities
-        self.total_number = OrderedDict()
-        self.calculate_total_number()
-
-    def function_evaluation(self, vec, settings):
+    def function_evaluation(self, vec, settings, print_out=True):
         """ Runs a simulation.
 
         Parameters
@@ -238,6 +249,8 @@ class Geometry:
             Total atoms to be used in function.
         settings : Settings
             Settings to run the sim with.
+        print_out : bool, optional
+            Whether or not to print out time.
 
         Returns
         -------
@@ -255,7 +268,7 @@ class Geometry:
         self.set_density(vec)
 
         # Recreate model
-        self.generate_materials_xml()
+        self.generate_materials_xml(settings.round_number)
         self.generate_tally_xml()
         self.generate_settings_xml(settings)
 
@@ -277,9 +290,10 @@ class Geometry:
         mat = self.depletion_matrix_list()
         time_matrix = time.time()
 
-        print("Time to openmc: ", time_openmc - time_start)
-        print("Time to unpack: ", time_unpack - time_openmc)
-        print("Time to matrix: ", time_matrix - time_unpack)
+        if print_out:
+            print("Time to openmc: ", time_openmc - time_start)
+            print("Time to unpack: ", time_unpack - time_openmc)
+            print("Time to matrix: ", time_matrix - time_unpack)
 
         return mat, k, self.reaction_rates, self.seed
 
@@ -297,11 +311,17 @@ class Geometry:
         # Return number density vector
         return self.total_density_list()
 
-    def generate_materials_xml(self):
+    def generate_materials_xml(self, round_number):
         """ Creates materials.xml from self.number_density.
 
         Iterates through each material in self.number_density and creates the
         openmc material object to generate materials.xml.
+
+        Parameters
+        ----------
+        round_number : bool
+            Whether or not to round output to OpenMC to 8 digits.
+            Useful in testing, as OpenMC is incredibly sensitive to exact values.
         """
         openmc.reset_auto_material_id()
 
@@ -316,7 +336,16 @@ class Geometry:
             for key_nuc in self.number_density[key_mat]:
                 # Check if in participating nuclides
                 if key_nuc in self.participating_nuclides:
-                    mat.add_nuclide(key_nuc, 1.0e-24*self.number_density[key_mat][key_nuc])
+                    val = 1.0e-24*self.number_density[key_mat][key_nuc]
+
+                    if round_number:
+                        val_magnitude = np.floor(np.log10(val))
+                        val_scaled = val / 10**val_magnitude
+                        val_round = round(val_scaled, 8)
+
+                        val = val_round * 10**val_magnitude
+
+                    mat.add_nuclide(key_nuc, val)
             mat.set_density(units='sum')
 
             if mat_name in self.materials.sab:
@@ -360,7 +389,11 @@ class Geometry:
         settings_file.entropy_dimension = settings.entropy_dimension
 
         # Set seed
-        seed = random.randint(1, sys.maxsize-1)
+        if settings.constant_seed is not None:
+            seed = settings.constant_seed
+        else:
+            seed = random.randint(1, sys.maxsize-1)
+
         self.seed = seed
         settings_file.seed = seed
 
@@ -638,20 +671,18 @@ class Geometry:
 
         return k_combined
 
-    def load_participating(self, filename):
+    def load_participating(self):
         """ Loads a cross_sections.xml file to find participating nuclides.
 
         This allows for nuclides that are important in the decay chain but not
         important neutronically, or have no cross section data.
-
-        Parameters
-        ----------
-        filename : str
-            Path to cross_sections.xml
         """
 
         # Reads cross_sections.xml to create a dictionary containing
         # participating (burning and not just decaying) nuclides.
+
+        filename = self.materials.cross_sections
+
         self.participating_nuclides = set()
 
         tree = ET.parse(filename)
@@ -736,3 +767,11 @@ def extract_openmc_materials(cell):
             mat_id.append(mat.id)
 
     return result, mat_id
+
+
+def clean_up_openmc():
+    """ Resets all automatic indexing in OpenMC, as these get in the way. """
+    openmc.reset_auto_material_id()
+    openmc.reset_auto_surface_id()
+    openmc.reset_auto_cell_id()
+    openmc.reset_auto_universe_id()

@@ -14,17 +14,6 @@ class Operator:
     This class contains everything the integrator needs to know to perform a
     simulation.
 
-    Parameters
-    ----------
-    geometry : openmc.Geometry
-        The OpenMC geometry object.
-    volume : OrderedDict of int to float
-        Given a material ID, gives the volume of said material.
-    materials : Materials
-        Materials to be used for this simulation.
-    settings : Settings
-        Settings object.
-
     Attributes
     ----------
     geometry : Geometry
@@ -33,7 +22,24 @@ class Operator:
         Settings object.
     """
 
-    def __init__(self, geometry, volume, materials, settings):
+    def __init__(self):
+        self.geometry = None
+        self.settings = None
+
+    def geometry_fill(self, geometry, volume, materials, settings):
+        """ Fill operator with OpenMC components.
+
+        Parameters
+        ----------
+        geometry : openmc.Geometry
+            The OpenMC geometry object.
+        volume : OrderedDict of int to float
+            Given a material ID, gives the volume of said material.
+        materials : Materials
+            Materials to be used for this simulation.
+        settings : Settings
+            Settings object.
+        """
         # Form geometry
         self.geometry = Geometry(geometry, volume, materials)
         self.settings = settings
@@ -86,25 +92,6 @@ class Operator:
         """
 
         return self.geometry.start()
-
-    def set_density(self, vec):
-        """ Sets density.
-
-        Sets the density in the exact same order as total_density_list outputs,
-        allowing for internal consistency
-
-        Parameters
-        ----------
-        total_density : list of numpy.array
-            Total atoms.
-
-        Todo
-        ----
-            Make this method less fragile.  The only thing guaranteeing the
-            order of vectors and matrices is self.burn_list's order.
-        """
-
-        self.geometry.set_density(vec)
 
     def eval(self, vec):
         """ Runs a simulation.

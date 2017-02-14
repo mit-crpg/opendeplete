@@ -16,7 +16,7 @@ import scipy.sparse.linalg as sla
 
 from .results import Results, write_results
 
-def integrate(operator, coeffs):
+def integrate(operator, coeffs, print_out=True):
     """ Performs integration of an operator using the method in coeffs.
 
     This is a general exponential-linear type integrator for depletion.
@@ -28,6 +28,8 @@ def integrate(operator, coeffs):
         The operator object to simulate on.
     coeffs : Integrator
         Coefficients to use to integrate with.
+    print_out : bool, optional
+        Whether or not to print out time.
     """
 
     # Save current directory
@@ -101,7 +103,7 @@ def integrate(operator, coeffs):
             rates_array.append(copy.deepcopy(rates))
 
             # Compute next x
-            x_next = compute_x(coeffs, f, x, dt, s)
+            x_next = compute_x(coeffs, f, x, dt, s, print_out)
             x.append(x_next)
 
         # Compute error if needed
@@ -161,11 +163,12 @@ def integrate(operator, coeffs):
     # Return to origin
     os.chdir(dir_home)
 
-def compute_x(coeffs, f, x, dt, stage):
-    """ Compute sub-vectors x for exponential-linear
+def compute_x(coeffs, f, x, dt, stage, print_out=True):
+    r""" Compute sub-vectors x for exponential-linear
 
     This function computes x using the following equation
-    x_s = \sum_{i=1}^s d_{si} e^{h \sum_{j=1}^s a_{sij} F(x_j)} x_i
+    .. math:
+        x_s = \sum_{i=1}^s d_{si} e^{h \sum_{j=1}^s a_{sij} F(x_j)} x_i
 
     Parameters
     ----------
@@ -179,6 +182,8 @@ def compute_x(coeffs, f, x, dt, stage):
         The current timestep.
     stage : Int
         Index s in the above equation
+    print_out : bool, optional
+        Whether or not to print out time.
 
     Returns
     -------
@@ -195,50 +200,22 @@ def compute_x(coeffs, f, x, dt, stage):
         # To save some time, determine if this index i is needed
         if coeffs.d[stage, i] == 0:
             continue
-        # Compute matrix sum in exponent
-        mat = compose_matrix(coeffs, f, stage, i)
 
-        matrix_exponent = matexp(mat, x[i], dt)
+        # Compute matrix sum in exponent
+        mat = []
+
+        for mat_ind in range(cells):
+            mat_cell = coeffs.a[stage, i, 0] * f[0][mat_ind]
+            for j in range(1, stage + 1):
+                mat_cell += coeffs.a[stage, i, j] * f[j][mat_ind]
+            mat.append(mat_cell)
+
+        matrix_exponent = matexp(mat, x[i], dt, print_out=print_out)
         x_a = [coeffs.d[stage, i] * matrix_exponent[j] for j in range(cells)]
 
         x_sub.append(x_a)
 
     return vector_sum(x_sub)
-
-def compose_matrix(coeffs, f, stage, i):
-    """ Compute matrix sums for calculation of x
-
-    This function computes
-    \sum_{j=1}^s a_{sij} F(x_j)
-
-    Parameters
-    ----------
-    coeffs : Integrator
-        Coefficients to use in this calculation.
-    f : list of list of scipy.sparse.csr_matrix
-        The depletion matrices.  Indexed [j][cell] using the above equation.
-    stage : Int
-        Index s in the above equation.
-    i : Int
-        Index i in the above equation.
-
-    Returns
-    -------
-    list of scipy.sparse.csr_matrix
-        The next matrix.
-    """
-
-    mat_final = []
-
-    cells = len(f[0])
-
-    for mat_ind in range(cells):
-        mat = coeffs.a[stage, i, 0] * f[0][mat_ind]
-        for j in range(1, stage + 1):
-            mat += coeffs.a[stage, i, j] * f[j][mat_ind]
-        mat_final.append(mat)
-
-    return mat_final
 
 def compute_max_relerr(v1, v2):
     """ Compute the maximum relative error between v1 and v2.
@@ -269,10 +246,11 @@ def compute_max_relerr(v1, v2):
     return relerr
 
 def compute_results(op, coeffs, x):
-    """ Computes polynomial coefficients and stores into a results type
+    r""" Computes polynomial coefficients and stores into a results type
 
     Computes the polynomial coefficients given by
-    c_i = \sum_{j=1}^n p_{ij} x_{j}
+    .. math:
+        c_i = \sum_{j=1}^n p_{ij} x_{j}
     where n is the number of components of x
 
     Parameters
@@ -323,6 +301,18 @@ def compute_results(op, coeffs, x):
     return results
 
 def vector_sum(vecs):
+    """ Computes the sum of a list of vectors.
+
+    Parameters
+    ----------
+    vecs : list of list of numpy.array
+        A list of list of arrays.  The internal list of arrays will be summed.
+
+    Returns
+    -------
+    vec : list of numpy.array
+        The summed components.
+    """
     if vecs == []:
         return []
     vec = copy.copy(vecs[0])
@@ -333,7 +323,7 @@ def vector_sum(vecs):
 
     return vec
 
-def matexp(mat, vec, dt):
+def matexp(mat, vec, dt, print_out=True):
     """ Parallel matrix exponent for a list of mat, vec.
 
     Performs a series of result = exp(mat) * vec in parallel to reduce
@@ -347,6 +337,8 @@ def matexp(mat, vec, dt):
         Vectors to operate a matrix exponent on.
     dt : float
         Time to integrate to.
+    print_out : bool, optional
+        Whether or not to print out time.
 
     Returns
     -------
@@ -364,7 +356,8 @@ def matexp(mat, vec, dt):
         vec2 = executor.map(matexp_wrapper, data)
     t2 = time.time()
 
-    print("Time to matexp: ", t2-t1)
+    if print_out:
+        print("Time to matexp: ", t2-t1)
 
     return list(vec2)
 

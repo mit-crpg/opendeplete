@@ -240,7 +240,7 @@ def segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad):
 
     return fuel_u, v_segment, v_gap, v_clad
 
-def generate_geometry():
+def generate_geometry(n_rings, n_wedges):
     """ Generates example geometry.
 
     This function creates the initial geometry, a 9 pin reflective problem.
@@ -250,14 +250,19 @@ def generate_geometry():
     is necessary to create a dictionary, volume, that maps a cell ID to a
     volume. Further, by naming cells the same as the above materials, the code
     can automatically handle the mapping.
+
+    Parameters
+    ----------
+    n_rings : int
+        Number of rings to generate for the geometry
+    n_wedges : int
+        Number of wedges to generate for the geometry
     """
 
     pitch = 1.26197
     r_fuel = 0.412275
     r_gap = 0.418987
     r_clad = 0.476121
-    n_rings = 5
-    n_wedges = 8
 
     n_pin = 3
 
@@ -308,17 +313,24 @@ def generate_geometry():
 
     return geometry, volume, mapping, lower_left, upper_right
 
-def generate_problem():
+def generate_problem(n_rings=5, n_wedges=8):
     """ Merges geometry and materials.
 
     This function initializes the materials for each cell using the dictionaries
     provided by generate_initial_number_density.  It is assumed a cell named
     'fuel' will have further region differentiation (see mapping).
+
+    Parameters
+    ----------
+    n_rings : int, optional
+        Number of rings to generate for the geometry
+    n_wedges : int, optional
+        Number of wedges to generate for the geometry
     """
 
     # Get materials dictionary, geometry, and volumes
     materials = generate_initial_number_density()
-    geometry, volume, mapping, lower_left, upper_right = generate_geometry()
+    geometry, volume, mapping, lower_left, upper_right = generate_geometry(n_rings, n_wedges)
 
     # Generate volume dictionary
     vol_dict = OrderedDict()

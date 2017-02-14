@@ -33,7 +33,8 @@ settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 
-op = opendeplete.Operator(geometry, volume, materials, settings)
+op = opendeplete.Operator()
+op.geometry_fill(geometry, volume, materials, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
 opendeplete.integrate(op, opendeplete.ce_cm_c1)
