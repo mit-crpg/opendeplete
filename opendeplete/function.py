@@ -27,7 +27,8 @@ class Operator:
         self.settings = None
 
     def geometry_fill(self, geometry, volume, materials, settings):
-        """
+        """ Fill operator with OpenMC components.
+
         Parameters
         ----------
         geometry : openmc.Geometry
