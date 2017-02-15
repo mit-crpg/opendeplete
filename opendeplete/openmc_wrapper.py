@@ -433,14 +433,14 @@ class Geometry(object):
         tally_dep = openmc.Tally(tally_id=tally_ind)
         for key in nuc_superset:
             if key in chain.nuclide_dict:
-                tally_dep.add_nuclide(key)
+                tally_dep.nuclides.append(key)
 
         for reaction in chain.react_to_ind:
-            tally_dep.add_score(reaction)
+            tally_dep.scores.append(reaction)
 
-        tallies_file.add_tally(tally_dep)
+        tallies_file.append(tally_dep)
 
-        tally_dep.add_filter(mat_filter_dep)
+        tally_dep.filters.append(mat_filter_dep)
         tallies_file.export_to_xml()
 
     def depletion_matrix_list(self):
@@ -748,7 +748,7 @@ def extract_openmc_materials(cell):
     Parameters
     ----------
     cell : openmc.Cell
-        The cell to extract from/
+        The cell to extract from
 
     Returns
     -------
