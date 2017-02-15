@@ -695,10 +695,9 @@ class Geometry(object):
             tree = ET.parse(filename)
         except:
             if filename is None:
-                print("No cross_sections.xml specified in materials.")
+                raise IOError("No cross_sections.xml specified in materials.")
             else:
-                print("Cross section file \"", filename, "\" is invalid.")
-            exit()
+                raise IOError('Cross section file "', filename, '" is invalid.')
 
         root = tree.getroot()
         self.burn_nuc_to_ind = OrderedDict()
