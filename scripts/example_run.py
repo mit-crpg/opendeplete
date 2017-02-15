@@ -18,7 +18,6 @@ dt = np.repeat([dt1], N)
 # Create settings variable
 settings = opendeplete.Settings()
 
-settings.chain_file = "../chains/chain_simple.xml"
 settings.openmc_call = "openmc"
 # An example for mpiexec:
 # settings.openmc_call = ["mpiexec", "openmc"]

@@ -30,7 +30,8 @@ class Settings(object):
     Attributes
     ----------
     chain_file : str
-        Path to the depletion chain xml file.
+        Path to the depletion chain xml file.  Defaults to the environment
+        variable "OPENDEPLETE_CHAIN" if it exists.
     openmc_call : List[str]
         The command to be used with subprocess.call to run a simulation. If no
         arguments are to be passed, a string suffices.  To run with mpiexec,
@@ -64,7 +65,10 @@ class Settings(object):
 
     def __init__(self):
         # OpenMC specific
-        self.chain_file = None
+        try:
+            self.chain_file = os.environ["OPENDEPLETE_CHAIN"]
+        except KeyError:
+            self.chain_file = None
         self.openmc_call = None
         self.particles = None
         self.batches = None
@@ -685,7 +689,15 @@ class Geometry:
 
         self.participating_nuclides = set()
 
-        tree = ET.parse(filename)
+        try:
+            tree = ET.parse(filename)
+        except:
+            if filename is None:
+                print("No cross_sections.xml specified in materials.")
+            else:
+                print("Cross section file \"", filename, "\" is invalid.")
+            exit()
+
         root = tree.getroot()
         self.burn_nuc_to_ind = OrderedDict()
         nuc_ind = 0
