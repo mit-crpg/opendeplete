@@ -8,7 +8,7 @@ from .depletion_chain import DepletionChain
 from .openmc_wrapper import Geometry
 
 
-class Operator:
+class Operator(object):
     """ The Operator class.
 
     This class contains everything the integrator needs to know to perform a
