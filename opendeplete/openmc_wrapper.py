@@ -342,14 +342,17 @@ class Geometry:
                 if key_nuc in self.participating_nuclides:
                     val = 1.0e-24*self.number_density[key_mat][key_nuc]
 
-                    if round_number:
-                        val_magnitude = np.floor(np.log10(val))
-                        val_scaled = val / 10**val_magnitude
-                        val_round = round(val_scaled, 8)
+                    # If nuclide is zero, do not add to the problem.
+                    if val != 0.0:
+                        if round_number:
+                            val_magnitude = np.floor(np.log10(val))
+                            val_scaled = val / 10**val_magnitude
+                            val_round = round(val_scaled, 8)
 
-                        val = val_round * 10**val_magnitude
+                            val = val_round * 10**val_magnitude
 
-                    mat.add_nuclide(key_nuc, val)
+                        mat.add_nuclide(key_nuc, val)
+
             mat.set_density(units='sum')
 
             if mat_name in self.materials.sab:
@@ -420,11 +423,14 @@ class Geometry:
 
         nuc_superset = set()
 
+        # Create the set of all nuclides in the decay chain in cells marked for
+        # burning in which the number density is greater than zero.
+
         for mat in self.burn_list:
             for key in self.number_density[mat]:
-                # Check if in participating nuclides
                 if key in self.participating_nuclides:
-                    nuc_superset.add(key)
+                    if self.number_density[mat][key] > 0.0:
+                        nuc_superset.add(key)
 
         # For each reaction in the chain, for each nuclide, and for each
         # cell, make a tally
@@ -560,18 +566,15 @@ class Geometry:
         for mat_i, mat in enumerate(self.burn_list):
 
             # Update total_number first
-            for i in range(self.n_nuc):
-                # Don't add if zero, for performance reasons.
-                if total_density[mat_i][i] != 0.0:
-                    nuc = self.nuc_list[i]
-                    # Add a "infinitely dilute" quantity if negative
-                    if total_density[mat_i][i] >= 0.0:
-                        self.total_number[mat][nuc] = total_density[mat_i][i]
-                    else:
-                        self.total_number[mat][nuc] = 1.0
-                        print("WARNING! Negative Number Densities!")
-                        print("Material id = ", mat_i, " nuclide ", nuc,
-                              " number = ", total_density[mat_i][i])
+            for i, nuc in enumerate(self.nuc_list):
+                # Add a "infinitely dilute" quantity if negative
+                if total_density[mat_i][i] >= 0.0:
+                    self.total_number[mat][nuc] = total_density[mat_i][i]
+                else:
+                    self.total_number[mat][nuc] = 1.0
+                    print("WARNING! Negative Number Densities!")
+                    print("Material id = ", mat_i, " nuclide ", nuc,
+                          " number = ", total_density[mat_i][i])
 
             # Then update number_density
             for nuc in self.total_number[mat]:
@@ -638,7 +641,7 @@ class Geometry:
             for nuc in self.burn_nuc_to_ind:
 
                 # If density = 0, there was no tally
-                if nuc not in self.total_number[mat]:
+                if nuc not in self.total_number[mat] or self.total_number[mat][nuc] == 0.0:
                     continue
 
                 nuclide = self.chain.nuc_by_ind(nuc)
