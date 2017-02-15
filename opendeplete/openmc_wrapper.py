@@ -338,6 +338,7 @@ class Geometry:
                 if key_nuc in self.participating_nuclides:
                     val = 1.0e-24*self.number_density[key_mat][key_nuc]
 
+                    # If nuclide is zero, do not add to the problem.
                     if val != 0.0:
                         if round_number:
                             val_magnitude = np.floor(np.log10(val))
@@ -346,7 +347,6 @@ class Geometry:
 
                             val = val_round * 10**val_magnitude
 
-                        # Do not add nuclide for performance reasons.
                         mat.add_nuclide(key_nuc, val)
 
             mat.set_density(units='sum')
