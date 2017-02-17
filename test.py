@@ -54,13 +54,16 @@ def test(use_full):
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description="Runs opendeplete's test suite.")
+    parser = argparse.ArgumentParser(
+        description="Runs opendeplete's test suite.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
     parser.add_argument("--suite", type=str, default="normal",
-                        help="Which suite to run, \"normal\" or \"full\", (default: \"normal\")")
+                        help='Which suite to run, "normal" or "full"')
 
     args = parser.parse_args()
 
-    full_test = bool(args.suite == "full")
+    full_test = (args.suite == "full")
 
     test(full_test)

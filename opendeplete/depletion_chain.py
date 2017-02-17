@@ -74,8 +74,8 @@ class DepletionChain(object):
             if filename is None:
                 print("No chain specified, either manually or in environment variable OPENDEPLETE_CHAIN.")
             else:
-                print("Decay chain \"", filename, "\" is invalid.")
-            exit()
+                print('Decay chain "', filename, '" is invalid.')
+            raise
 
         # Read nuclide tables
         decay_node = root.find('decay_constants')

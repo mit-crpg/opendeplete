@@ -32,7 +32,7 @@ class Settings(object):
     chain_file : str
         Path to the depletion chain xml file.  Defaults to the environment
         variable "OPENDEPLETE_CHAIN" if it exists.
-    openmc_call : List[str]
+    openmc_call : list of str
         The command to be used with subprocess.call to run a simulation. If no
         arguments are to be passed, a string suffices.  To run with mpiexec,
         a list of strings is needed.
@@ -42,11 +42,11 @@ class Settings(object):
         Number of batches.
     inactive : int
         Number of inactive batches.
-    lower_left : List[float]
+    lower_left : list of float
         Coordinate of lower left of bounding box of geometry.
-    upper_right : List[float]
+    upper_right : list of float
         Coordinate of upper right of bounding box of geometry.
-    entropy_dimension : List[int]
+    entropy_dimension : list of int
         Grid size of entropy.
     round_number : bool
         Whether or not to round output to OpenMC to 8 digits.
@@ -120,8 +120,8 @@ class Materials(object):
         self.burn = None
 
 
-class Geometry:
-    """ The Geometry class.
+class Geometry(object):
+    """The Geometry class.
 
     Contains all geometry- and materials-related components necessary for
     depletion.
@@ -146,25 +146,26 @@ class Geometry:
     seed : int
         The RNG seed used in last OpenMC run.
     number_density : OrderedDict of int to OrderedDict of str to float
-        The number density of a nuclide in a cell.  Indexed as
-        number_density[cell ID : int][nuclide : str].
+        The number density of a nuclide in a material.  Indexed as
+        number_density[material ID : int][nuclide : str].
     total_number : OrderedDict of int to OrderedDict of str to float
-        The number density of a nuclide in a cell multiplied by the volume of
-        the cell.  Indexed as total_number[cell ID : int][nuclide : str].
+        The number density of a nuclide in a material multiplied by the volume
+        of the material.  Indexed as total_number[material ID : int][nuclide :
+        str].
     participating_nuclides : set of str
         A set listing all unique nuclides available from cross_sections.xml.
     nuc_list : list of str
         A list of all nuclide names. Used for sorting the simulation.
     burn_list : list of int
-        A list of all cell IDs to be burned.  Used for sorting the simulation.
+        A list of all material IDs to be burned.  Used for sorting the simulation.
     chain : DepletionChain
         The depletion chain information necessary to form matrices and tallies.
     reaction_rates : ReactionRates
         Reaction rates from the last operator step.
     power : OrderedDict of str to float
-        Cell-by-Cell power.  Indexed by cell ID.
+        Material-by-Material power.  Indexed by material ID.
     mat_name : OrderedDict of str to int
-        The name of region each cell is set to.  Indexed by cell ID.
+        The name of region each material is set to.  Indexed by material ID.
     burn_mat_to_id : OrderedDict of str to int
         Dictionary mapping material ID (as a string) to an index in reaction_rates.
     burn_nuc_to_id : OrderedDict of str to int
@@ -172,6 +173,7 @@ class Geometry:
         reaction_rates.
     n_nuc : int
         Number of nuclides considered in the decay chain.
+
     """
 
     def __init__(self, geometry, volume, materials):
@@ -437,14 +439,14 @@ class Geometry:
         tally_dep = openmc.Tally(tally_id=tally_ind)
         for key in nuc_superset:
             if key in chain.nuclide_dict:
-                tally_dep.add_nuclide(key)
+                tally_dep.nuclides.append(key)
 
         for reaction in chain.react_to_ind:
-            tally_dep.add_score(reaction)
+            tally_dep.scores.append(reaction)
 
-        tallies_file.add_tally(tally_dep)
+        tallies_file.append(tally_dep)
 
-        tally_dep.add_filter(mat_filter_dep)
+        tally_dep.filters.append(mat_filter_dep)
         tallies_file.export_to_xml()
 
     def depletion_matrix_list(self):
@@ -698,8 +700,8 @@ class Geometry:
             if filename is None:
                 print("No cross_sections.xml specified in materials.")
             else:
-                print("Cross section file \"", filename, "\" is invalid.")
-            exit()
+                print('Cross section file "', filename, '" is invalid.')
+            raise
 
         root = tree.getroot()
         self.burn_nuc_to_ind = OrderedDict()
@@ -750,7 +752,7 @@ def extract_openmc_materials(cell):
     Parameters
     ----------
     cell : openmc.Cell
-        The cell to extract from/
+        The cell to extract from
 
     Returns
     -------
