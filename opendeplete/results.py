@@ -383,9 +383,12 @@ def get_dict(nested_dict, burn_list):
 
     # Now, form cell_to_ind, nuc_to_ind
     cell_to_ind = OrderedDict()
-    for i, cell_id in enumerate(nested_dict):
+
+    i = 0
+    for cell_id in nested_dict:
         if cell_id in burn_list:
             cell_to_ind[str(cell_id)] = i
+            i += 1
 
     nuc_to_ind = OrderedDict()
     for i, nuc in enumerate(unique_nuc):
