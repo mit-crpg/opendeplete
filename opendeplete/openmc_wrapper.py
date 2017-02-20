@@ -12,6 +12,7 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+import h5py
 import numpy as np
 import openmc
 from openmc.stats import Box
@@ -618,65 +619,67 @@ class Geometry(object):
         ----
             Provide units for new_power
         """
-        statepoint = openmc.StatePoint(filename)
 
-        k_combined = statepoint.k_combined[0]
-
-        # Generate new power dictionary
-
-        self.power = OrderedDict()
-
-        # ---------------------------------------------------------------------
-        # Unpack depletion list
-        tally_dep = statepoint.get_tally(id=1)
-
-        # Zero out reaction_rates
         self.reaction_rates[:, :, :] = 0.0
 
-        df_tally = tally_dep.get_pandas_dataframe()
-        # For each mat to be burned
-        for mat_str in self.burn_mat_to_ind:
-            mat = int(mat_str)
-            df_mat = df_tally[df_tally["material"] == mat]
+        file = h5py.File(filename, "r")
 
-            # For each nuclide that was tallied
-            for nuc in self.burn_nuc_to_ind:
+        k_combined = file["k_combined"][0]
 
-                # If density = 0, there was no tally
-                if nuc not in self.total_number[mat] or self.total_number[mat][nuc] == 0.0:
-                    continue
+        nuclides_binary = file["tallies/tally 1/nuclides"].value
+        nuclides = [nuc.decode('utf8') for nuc in nuclides_binary]
 
-                nuclide = self.chain.nuc_by_ind(nuc)
+        reactions_binary = file["tallies/tally 1/score_bins"].value
+        reactions = [react.decode('utf8') for react in reactions_binary]
 
-                df_nuclide = df_mat[df_mat["nuclide"] == nuc]
+        # Get fast map
+        nuc_ind = [self.reaction_rates.nuc_to_ind[nuc] for nuc in nuclides]
+        react_ind = [self.reaction_rates.react_to_ind[react] for react in reactions]
 
-                # For each reaction pathway
-                for j in range(nuclide.n_reaction_paths):
-                    # Extract tally
-                    tally_type = nuclide.reaction_type[j]
+        # Compute fission power
+        # TODO : improve this calculation
 
-                    k = self.reaction_rates.react_to_ind[tally_type]
-                    value = df_nuclide[df_nuclide["score"] ==
-                                       tally_type]["mean"].values[0]
+        power = 0.0
 
-                    # The reaction rates are normalized to total number of
-                    # atoms in the simulation.
-                    self.reaction_rates[mat_str, nuclide.name, k] = value \
-                        / self.total_number[mat][nuc]
+        power_vec = np.zeros(self.reaction_rates.n_nuc)
 
-                    # Calculate power if fission
-                    if tally_type == "fission":
-                        power = value * nuclide.fission_power
-                        if mat not in self.power:
-                            self.power[mat] = power
-                        else:
-                            self.power[mat] += power
+        fission_ind = self.reaction_rates.react_to_ind["fission"]
 
-        # ---------------------------------------------------------------------
-        # Normalize to power
-        original_power = sum(self.power.values())
+        for nuclide in self.chain.nuclides:
+            if nuclide.name in self.reaction_rates.nuc_to_ind:
+                ind = self.reaction_rates.nuc_to_ind[nuclide.name]
 
-        self.reaction_rates[:, :, :] *= (new_power / original_power)
+                power_vec[ind] = nuclide.fission_power
+
+        # Extract results
+        for i, mat in enumerate(self.burn_list):
+            # Get material results hyperslab
+            results = file["tallies/tally 1/results"][i, :, 0]
+
+            results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
+            number = np.zeros((self.reaction_rates.n_nuc))
+
+            # Expand into our memory layout
+            j = 0
+            for i_nuc_array, i_nuc_results in enumerate(nuc_ind):
+                nuc = nuclides[i_nuc_array]
+                for react in react_ind:
+                    results_expanded[i_nuc_results, react] = results[j]
+                    number[i_nuc_results] = self.total_number[mat][nuc]
+                    j += 1
+
+            # Add power
+            power += np.dot(results_expanded[:, fission_ind], power_vec)
+
+            # Divide by total number and store
+            for i_nuc_results in nuc_ind:
+                for react in react_ind:
+                    if number[i_nuc_results] != 0.0:
+                        results_expanded[i_nuc_results, react] /= number[i_nuc_results]
+
+            self.reaction_rates.rates[i, :, :] = results_expanded
+
+        self.reaction_rates[:, :, :] *= (new_power / power)
 
         return k_combined
 
