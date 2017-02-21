@@ -363,7 +363,6 @@ class Geometry(object):
             materials.append(mat)
 
         materials_file = openmc.Materials(materials)
-        materials_file.cross_sections = self.materials.cross_sections
         materials_file.export_to_xml()
 
     def generate_settings_xml(self, settings):
