@@ -247,6 +247,8 @@ class Geometry(object):
             self.burn_nuc_to_ind,
             self.chain.react_to_ind)
 
+        self.chain.nuc_to_react_ind = self.burn_nuc_to_ind
+
     def function_evaluation(self, vec, settings, print_out=True):
         """ Runs a simulation.
 
@@ -467,16 +469,18 @@ class Geometry(object):
             Generalize method away from process parallelism.
         """
 
-        # An issue with concurrent.futures is that it is far easier to write a
-        # map, so I need to concatenate the data into a single variable with
-        # which a map works.
-        input_list = []
-        for mat in self.burn_mat_to_ind:
-            mat_ind = self.burn_mat_to_ind[mat]
-            input_list.append((self.chain, self.reaction_rates, mat_ind))
+        n_mat = len(self.burn_mat_to_ind)
+
+        def data_iterator(start, end):
+            """ Simple iterator over chain / reaction rates"""
+            i = start
+
+            while i < end:
+                yield (self.chain, self.reaction_rates[i, :, :])
+                i += 1
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(matrix_wrapper, input_list)
+            matrices = executor.map(matrix_wrapper, data_iterator(0, n_mat))
 
         return list(matrices)
 

@@ -31,6 +31,8 @@ class DepletionChain(object):
         Maps a nuclide name to an index in yields.fis_yield_data
     yields : Yield
         Yield object for fission.
+    nuc_to_react_ind : OrderedDict of str to int
+        Dictionary mapping a nuclide name to an index in ReactionRates.
     react_to_ind : OrderedDict of str to int
         Dictionary mapping a reaction name to an index in ReactionRates.
     """
@@ -43,6 +45,7 @@ class DepletionChain(object):
 
         self.yields = None
 
+        self.nuc_to_react_ind = OrderedDict()
         self.react_to_ind = OrderedDict()
 
     @property
@@ -175,15 +178,13 @@ class DepletionChain(object):
                 self.yields.fis_yield_data[product_index, energy_index, :] = \
                     [float(x) for x in temp.split()]
 
-    def form_matrix(self, rates, cell_id):
+    def form_matrix(self, rates):
         """ Forms depletion matrix.
 
         Parameters
         ----------
-        rates : ReactionRates
-            Reaction rates to form matrix from.
-        cell_id : int
-            Cell coordinate in rates to evaluate for.
+        rates : numpy.ndarray
+            2D array indexed by nuclide then by cell.
 
         Returns
         -------
@@ -212,13 +213,15 @@ class DepletionChain(object):
 
                         matrix[k, i] += nuc.branching_ratio[j] * decay_constant
 
-            if nuc.name in rates.nuc_to_ind:
+            if nuc.name in self.nuc_to_react_ind:
                 # Extract all reactions for this nuclide in this cell
-                nuc_rates = rates[cell_id, nuc.name, :]
+                nuc_ind = self.nuc_to_react_ind[nuc.name]
+                nuc_rates = rates[nuc_ind, :]
+
                 for j in range(nuc.n_reaction_paths):
                     path = nuc.reaction_type[j]
                     # Extract reaction index, and then final reaction rate
-                    r_id = rates.react_to_ind[path]
+                    r_id = self.react_to_ind[path]
                     path_rate = nuc_rates[r_id]
 
                     # Loss term
@@ -270,12 +273,12 @@ def matrix_wrapper(input_tuple):
 
     Parameters
     ----------
-    input_tuple : tuple of DepletionChain, ReactionRates, int
-        Index 0 is the chain, index 1 is the reaction rate array, index 2 is the cell_id.
+    input_tuple : tuple of DepletionChain, numpy.ndarray
+        Index 0 is the chain, index 1 is the reaction rate array.
 
     Returns
     -------
     scipy.sparse.csr_matrix
         The matrix for this reaction rate.
     """
-    return input_tuple[0].form_matrix(input_tuple[1], input_tuple[2])
+    return input_tuple[0].form_matrix(input_tuple[1])

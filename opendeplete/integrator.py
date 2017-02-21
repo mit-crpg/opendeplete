@@ -346,14 +346,18 @@ def matexp(mat, vec, dt, print_out=True):
         List of results of the matrix exponent.
     """
 
-    # Merge mat, vec into a list (yes, this is wasteful, blame concurrent
-    # having only a map instead of a starmap)
-
     t1 = time.time()
-    data = [(mat[i], vec[i], dt) for i in range(len(mat))]
+
+    def data_iterator(start, end):
+        """ Simple iterator over matrices and vectors."""
+        i = start
+
+        while i < end:
+            yield (mat[i], vec[i], dt)
+            i += 1
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        vec2 = executor.map(matexp_wrapper, data)
+        vec2 = executor.map(matexp_wrapper, data_iterator(0, len(mat)))
     t2 = time.time()
 
     if print_out:
