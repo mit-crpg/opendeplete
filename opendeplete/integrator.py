@@ -273,7 +273,7 @@ def compute_results(op, coeffs, x):
     results.allocate(op, coeffs.p_terms)
 
     # Get indexing terms
-    nuc_list, burn_list, non_participating = op.get_results_info()
+    nuc_list, burn_list = op.get_results_info()
 
     for mat_i, mat in enumerate(burn_list):
         mat_str = str(mat)
@@ -290,13 +290,6 @@ def compute_results(op, coeffs, x):
         # Add to results
         for nuc_i, nuc in enumerate(nuc_list):
             results[mat_str, nuc] = p[nuc_i, :]
-
-        # Add non-participating
-        for nuc in non_participating[mat]:
-            p_temp = np.zeros(coeffs.p_terms)
-            p_temp[0] = non_participating[mat][nuc]
-
-            results[mat_str, nuc] = p_temp
 
     return results
 

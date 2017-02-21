@@ -3,6 +3,7 @@
 Contains results generation and saving capabilities.
 """
 
+import copy
 from collections import OrderedDict
 
 import numpy as np
@@ -72,7 +73,7 @@ class Results(object):
         self.volume = operator.geometry.volume
 
         # Get mapping dictionaries from operator
-        self.cell_to_ind, self.nuc_to_ind = get_dict(operator.total_number, operator.burn_list)
+        self.cell_to_ind, self.nuc_to_ind = get_dict(operator.number)
 
         # Create polynomial storage array
         self.data = np.zeros((self.n_cell, self.n_nuc, self.p_terms))
@@ -351,7 +352,7 @@ class Results(object):
 
 
 
-def get_dict(nested_dict, burn_list):
+def get_dict(number):
     """ Given an operator nested dictionary, output indexing dictionaries.
 
     These indexing dictionaries map cell IDs and nuclide names to indices
@@ -359,42 +360,30 @@ def get_dict(nested_dict, burn_list):
 
     Parameters
     ----------
-    nested_dict : OrderedDict of str to OrderedDict of str to Float
-        Dictionary with first index corresponding to cell, second corresponding
-        to nuclide, maps to total atom quantity.
-    burn_list : list of int
-        A list of all cell IDs to be burned.
+    number : AtomNumber
+        The object ot extract dictionaries from
 
     Returns
     -------
-    cell_to_ind : OrderedDict of str to int
+    mat_to_ind : OrderedDict of str to int
         Maps cell strings to index in array.
     nuc_to_ind : OrderedDict of str to int
         Maps nuclide strings to index in array.
     """
-
-    # First, find a complete set of nuclides
-    unique_nuc = set()
-
-    for cell_id in nested_dict:
-        if cell_id in burn_list:
-            for nuc in nested_dict[cell_id]:
-                unique_nuc.add(nuc)
-
-    # Now, form cell_to_ind, nuc_to_ind
-    cell_to_ind = OrderedDict()
-
-    i = 0
-    for cell_id in nested_dict:
-        if cell_id in burn_list:
-            cell_to_ind[str(cell_id)] = i
-            i += 1
-
+    mat_to_ind = OrderedDict()
     nuc_to_ind = OrderedDict()
-    for i, nuc in enumerate(unique_nuc):
-        nuc_to_ind[nuc] = i
 
-    return cell_to_ind, nuc_to_ind
+    for nuc in number.nuc_to_ind:
+        nuc_ind = number.nuc_to_ind[nuc]
+        if nuc_ind < number.n_nuc_burn:
+            nuc_to_ind[nuc] = nuc_ind
+
+    for mat in number.mat_to_ind:
+        mat_ind = number.mat_to_ind[mat]
+        if mat_ind < number.n_mat_burn:
+            mat_to_ind[mat] = mat_ind
+
+    return mat_to_ind, nuc_to_ind
 
 def write_results(result, filename, index):
     """ Outputs result to an .hdf5 file.

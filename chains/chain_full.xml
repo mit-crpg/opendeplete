@@ -7878,16 +7878,9 @@
       <reaction_type type="(n,gamma)" target="Nb87"/>
       <reaction_type type="(n,2n)" target="Nb85"/>
     </nuclide_table>
-    <nuclide_table name="Nb86m" decay_modes="0" reactions="6">
-      <reaction_type type="(n,3n)" target="Nb84"/>
-      <reaction_type type="(n,p)" target="Zr86"/>
-      <reaction_type type="(n,a)" target="Y83"/>
-      <reaction_type type="(n,4n)" target="Nb83"/>
-      <reaction_type type="(n,gamma)" target="Nb87"/>
-      <reaction_type type="(n,2n)" target="Nb85"/>
-    </nuclide_table>
-    <nuclide_table name="Nb86m" half_life="88.0" decay_modes="1" reactions="6">
-      <decay_type type="?" target="Zr86" branching_ratio="0.0"/>
+    <!-- Manually edited here-->
+    <nuclide_table name="Nb86m" half_life="56.8" decay_modes="1" reactions="6">
+      <decay_type type="?" target="Zr86" branching_ratio="1.0"/>
       <reaction_type type="(n,3n)" target="Nb84"/>
       <reaction_type type="(n,p)" target="Zr86"/>
       <reaction_type type="(n,a)" target="Y83"/>
@@ -18864,15 +18857,6 @@
       <reaction_type type="(n,4n)" target="Nd151"/>
       <reaction_type type="(n,gamma)" target="Nd155"/>
       <reaction_type type="(n,2n)" target="Nd153"/>
-    </nuclide_table>
-    <nuclide_table name="Pm154m" half_life="160.8" decay_modes="1" reactions="6">
-      <decay_type type="?" target="Sm154" branching_ratio="1.0"/>
-      <reaction_type type="(n,3n)" target="Pm152"/>
-      <reaction_type type="(n,p)" target="Nd154"/>
-      <reaction_type type="(n,a)" target="Pr151"/>
-      <reaction_type type="(n,4n)" target="Pm151"/>
-      <reaction_type type="(n,gamma)" target="Pm155"/>
-      <reaction_type type="(n,2n)" target="Pm153"/>
     </nuclide_table>
     <nuclide_table name="Pm154m" half_life="160.8" decay_modes="1" reactions="6">
       <decay_type type="?" target="Sm154" branching_ratio="1.0"/>

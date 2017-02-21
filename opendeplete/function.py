@@ -67,12 +67,12 @@ class Operator(object):
         return self.geometry.reaction_rates
 
     @property
-    def total_number(self):
-        """OrderedDict of int to OrderedDict of str to float
-            Total atoms for the problem.  Indexed by [cell_id]["nuclide name"].
+    def number(self):
+        """ AtomNumber
+            Total number of atoms in simulation.
         """
 
-        return self.geometry.total_number
+        return self.geometry.number
 
     @property
     def burn_list(self):
@@ -133,7 +133,7 @@ class Operator(object):
         self.geometry.fill_nuclide_list()
 
     def get_results_info(self):
-        """ Returns non-participating nuclides, cell lists, and nuc lists.
+        """ Returns cell lists, and nuc lists.
 
         Returns
         -------
@@ -141,11 +141,7 @@ class Operator(object):
             A list of all nuclide names. Used for sorting the simulation.
         burn_list : list of int
             A list of all cell IDs to be burned.  Used for sorting the simulation.
-        not_participating : dict of str to dict of str to float
-            Not participating nuclides, indexed by cell id and nuclide id.
 
         """
 
-        return self.geometry.nuc_list, \
-               self.geometry.burn_list, \
-               self.geometry.get_non_participating_nuc()
+        return self.geometry.nuc_list, self.geometry.burn_list
