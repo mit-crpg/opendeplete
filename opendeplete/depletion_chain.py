@@ -201,7 +201,8 @@ class DepletionChain(object):
                 # Loss
                 decay_constant = math.log(2) / nuc.half_life
 
-                matrix[i, i] -= decay_constant
+                if decay_constant != 0.0:
+                    matrix[i, i] -= decay_constant
 
                 # Gain
                 for j in range(nuc.n_decay_paths):
@@ -211,7 +212,10 @@ class DepletionChain(object):
                     if target_nuc != 'Nothing':
                         k = self.nuclide_dict[target_nuc]
 
-                        matrix[k, i] += nuc.branching_ratio[j] * decay_constant
+                        branch_val = nuc.branching_ratio[j] * decay_constant
+
+                        if branch_val != 0.0:
+                            matrix[k, i] += branch_val
 
             if nuc.name in self.nuc_to_react_ind:
                 # Extract all reactions for this nuclide in this cell
@@ -225,7 +229,8 @@ class DepletionChain(object):
                     path_rate = nuc_rates[r_id]
 
                     # Loss term
-                    matrix[i, i] -= path_rate
+                    if path_rate != 0.0:
+                        matrix[i, i] -= path_rate
 
                     # Gain term
                     target_nuc = nuc.reaction_target[j]
@@ -234,15 +239,18 @@ class DepletionChain(object):
                     if target_nuc != 'Nothing':
                         if path != 'fission':
                             k = self.nuclide_dict[target_nuc]
-                            matrix[k, i] += path_rate
+                            if path_rate != 0.0:
+                                matrix[k, i] += path_rate
                         else:
                             m = self.precursor_dict[nuc.name]
 
                             for k in range(self.yields.n_fis_prod):
                                 l = self.nuclide_dict[self.yields.name[k]]
                                 # Todo energy
-                                matrix[l, i] += \
-                                    self.yields.fis_yield_data[k, 0, m] * path_rate
+                                yield_val = self.yields.fis_yield_data[k, 0, m] * path_rate
+                                if yield_val != 0.0:
+                                    matrix[l, i] += yield_val
+                                    
 
         # Use DOK matrix as intermediate representation, then convert to CSR and return
         matrix_dok = sp.dok_matrix((self.n_nuclides, self.n_nuclides))
