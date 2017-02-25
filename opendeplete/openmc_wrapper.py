@@ -180,7 +180,6 @@ class OpenMCOperator(Operator):
 
     def extract_all_materials(self):
         """ Iterate through all cells, create number density vectors from mats."""
-        mat_ind = 0
 
         # Get a set of materials, nuclides
         mat_burn = set()

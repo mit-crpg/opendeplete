@@ -3,12 +3,9 @@
 This module implements the OpenDeplete -> OpenMC linkage.
 """
 
-from collections import OrderedDict
-
 import numpy as np
 import scipy.sparse as sp
 
-from opendeplete.atom_number import AtomNumber
 from opendeplete.reaction_rates import ReactionRates
 from opendeplete.function import Operator
 

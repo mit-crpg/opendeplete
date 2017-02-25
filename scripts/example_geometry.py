@@ -6,7 +6,6 @@ Gd-157 2 wt-percent enriched.  All pins are segmented.
 
 from collections import OrderedDict
 import math
-import os
 
 import numpy as np
 import openmc

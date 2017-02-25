@@ -109,7 +109,7 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        # shutil.rmtree("test_full", ignore_errors=True)
+        shutil.rmtree("test_full", ignore_errors=True)
 
 
 if __name__ == '__main__':

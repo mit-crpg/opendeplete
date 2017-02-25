@@ -3,7 +3,6 @@
 Contains results generation and saving capabilities.
 """
 
-import copy
 from collections import OrderedDict
 
 import numpy as np
