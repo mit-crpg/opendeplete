@@ -11,7 +11,7 @@ import os
 import numpy as np
 import openmc
 
-from opendeplete import Materials, density_to_mat
+from opendeplete import density_to_mat
 
 
 def generate_initial_number_density():
@@ -141,14 +141,7 @@ def generate_initial_number_density():
     burn['clad'] = False
     burn['cool'] = False
 
-    materials = Materials()
-    materials.temperature = temperature
-    materials.sab = sab
-    materials.initial_density = initial_density
-    materials.burn = burn
-    materials.cross_sections = os.environ["OPENMC_CROSS_SECTIONS"]
-
-    return materials
+    return temperature, sab, initial_density, burn
 
 def segment_pin(n_rings, n_wedges, r_fuel, r_gap, r_clad):
     """ Calculates a segmented pin.
@@ -329,21 +322,38 @@ def generate_problem(n_rings=5, n_wedges=8):
     """
 
     # Get materials dictionary, geometry, and volumes
-    materials = generate_initial_number_density()
+    temperature, sab, initial_density, burn = generate_initial_number_density()
     geometry, volume, mapping, lower_left, upper_right = generate_geometry(n_rings, n_wedges)
 
-    # Apply distribmats
+    # Apply distribmats, fill geometry
     cells = geometry.root_universe.get_all_cells()
     for cell_id in cells:
         cell = cells[cell_id]
         if cell.name == 'fuel':
-            omc_mats = [density_to_mat(materials.initial_density[cell_type])
-                        for cell_type in mapping]
+
+            omc_mats = []
+
+            for cell_type in mapping:
+                omc_mat = density_to_mat(initial_density[cell_type])
+
+                if cell_type in sab:
+                    omc_mat.add_s_alpha_beta(sab[cell_type])
+                omc_mat.temperature = temperature[cell_type]
+                omc_mat.burnable = burn[cell_type]
+
+                omc_mats.append(omc_mat)
+
             cell.fill = omc_mats
             cell.volume = volume['fuel']
         elif cell.name != '':
-            omc_mat = density_to_mat(materials.initial_density[cell.name])
+            omc_mat = density_to_mat(initial_density[cell.name])
+
+            if cell.name in sab:
+                omc_mat.add_s_alpha_beta(sab[cell.name])
+            omc_mat.temperature = temperature[cell.name]
+            omc_mat.burnable = burn[cell.name]
+
             cell.fill = omc_mat
             cell.volume = volume[cell.name]
 
-    return geometry, materials, lower_left, upper_right
+    return geometry, lower_left, upper_right

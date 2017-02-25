@@ -28,7 +28,7 @@ class TestFull(unittest.TestCase):
         n_wedges = 4
 
         # Load geometry from example
-        geometry, materials, lower_left, upper_right = \
+        geometry, lower_left, upper_right = \
             example_geometry.generate_problem(n_rings=n_rings, n_wedges=n_wedges)
 
         # Create dt vector for 3 steps with 15 day timesteps
@@ -57,7 +57,7 @@ class TestFull(unittest.TestCase):
         settings.dt_vec = dt
         settings.output_dir = "test_full"
 
-        op = opendeplete.OpenMCOperator(geometry, materials, settings)
+        op = opendeplete.OpenMCOperator(geometry, settings)
 
         # Perform simulation using the predictor algorithm
         opendeplete.integrate(op, opendeplete.predictor_c0)
@@ -109,7 +109,7 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        shutil.rmtree("test_full", ignore_errors=True)
+        # shutil.rmtree("test_full", ignore_errors=True)
 
 
 if __name__ == '__main__':

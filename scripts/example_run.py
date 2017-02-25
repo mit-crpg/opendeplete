@@ -6,7 +6,7 @@ import opendeplete
 import example_geometry
 
 # Load geometry from example
-geometry, materials, lower_left, upper_right = example_geometry.generate_problem()
+geometry, lower_left, upper_right = example_geometry.generate_problem()
 
 # Create dt vector for 5.5 months with 15 day timesteps
 dt1 = 15*24*60*60  # 15 days
@@ -32,7 +32,7 @@ settings.power = 2.337e15*4  # MeV/second cm from CASMO
 settings.dt_vec = dt
 settings.output_dir = 'test'
 
-op = opendeplete.OpenMCOperator(geometry, materials, settings)
+op = opendeplete.OpenMCOperator(geometry, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
 opendeplete.integrate(op, opendeplete.ce_cm_c1)

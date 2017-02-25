@@ -89,33 +89,20 @@ class OpenMCSettings(Settings):
 class Materials(object):
     """The Materials class.
 
-    This contains dictionaries indicating which cells are to be filled with
-    what number of atoms and what libraries.
+    Contains information about cross sections for a cell.
 
     Attributes
     ----------
-    inital_density : OrderedDict[OrderedDict[float]]
-        Initial density of the simulation.  Indexed as
-        initial_density[name of region : str][name of nuclide : str].
-    temperature : OrderedDict[str]
-        Temperature in Kelvin for each region.  Indexed as temperature[name
-        of region : float].
-    cross_sections : str
-        Path to cross_sections.xml file.
-    sab : OrderedDict[str]
-        ENDF S(a,b) name for a region that needs S(a,b) data.  Indexed as
-        sab[name of region : str].  Not set if no S(a,b) needed for region.
-    burn : OrderedDict[bool]
-        burn[name of region : str] = True if region needs to be in burn.
-
+    temperature : float
+        Temperature in Kelvin for each region.
+    sab : str or list of str
+        ENDF S(a,b) name for a region that needs S(a,b) data.  Not set if no
+        S(a,b) needed for region.
     """
 
     def __init__(self):
-        self.initial_density = None
         self.temperature = None
-        self.cross_sections = None
         self.sab = None
-        self.burn = None
 
 
 class OpenMCOperator(Operator):
@@ -127,8 +114,6 @@ class OpenMCOperator(Operator):
     ----------
     geometry : openmc.Geometry
         The OpenMC geometry object.
-    materials : openmc_wrapper.Materials
-        Materials to be used for this simulation.
     settings : OpenMCSettings
         Settings object.
 
@@ -138,7 +123,7 @@ class OpenMCOperator(Operator):
         Settings object. (From Operator)
     geometry : openmc.Geometry
         The OpenMC geometry object.
-    materials : Materials
+    materials : list of Materials
         Materials to be used for this simulation.
     seed : int
         The RNG seed used in last OpenMC run.
@@ -164,10 +149,10 @@ class OpenMCOperator(Operator):
 
     """
 
-    def __init__(self, geometry, materials, settings):
+    def __init__(self, geometry, settings):
         Operator.__init__(self, settings)
         self.geometry = geometry
-        self.materials = materials
+        self.materials = []
         self.seed = 0
         self.number = None
         self.participating_nuclides = None
@@ -218,7 +203,7 @@ class OpenMCOperator(Operator):
                 mat = cell.fill
                 for nuclide in mat.nuclides:
                     nuc_set.add(nuclide[0].name)
-                if self.materials.burn[name]:
+                if mat.burnable:
                     mat_burn.add(str(mat.id))
                     burn_mat_in_cell.append(str(mat.id))
                 else:
@@ -228,7 +213,7 @@ class OpenMCOperator(Operator):
                 for mat in cell.fill:
                     for nuclide in mat.nuclides:
                         nuc_set.add(nuclide[0].name)
-                    if self.materials.burn[name]:
+                    if mat.burnable:
                         mat_burn.add(str(mat.id))
                         burn_mat_in_cell.append(str(mat.id))
                     else:
@@ -280,22 +265,38 @@ class OpenMCOperator(Operator):
 
         self.number = AtomNumber(mat_dict, nuc_dict, volume, n_mat_burn, n_nuc_burn)
 
+        self.materials = [None] * self.number.n_mat
+
         # Now extract the number densities and store
         cells = self.geometry.get_all_material_cells()
         for cell_id in cells:
             cell = cells[cell_id]
             if isinstance(cell.fill, openmc.Material):
-                mat = cell.fill
-                for nuclide in mat.nuclides:
-                    name = nuclide[0].name
-                    number = nuclide[1] * 1.0e24
-                    self.number.set_atom_density(str(mat.id), name, number)
+                self.set_number_from_mat(cell.fill)
             else:
                 for mat in cell.fill:
-                    for nuclide in mat.nuclides:
-                        name = nuclide[0].name
-                        number = nuclide[1] * 1.0e24
-                        self.number.set_atom_density(str(mat.id), name, number)
+                    self.set_number_from_mat(mat)
+
+    def set_number_from_mat(self, mat):
+        """ Extracts material and number densities from openmc.Material
+
+        Parameters
+        ----------
+        mat : openmc.Materials
+            The material to read from
+        """
+
+        mat_id = str(mat.id)
+        mat_ind = self.number.mat_to_ind[mat_id]
+
+        self.materials[mat_ind] = Materials()
+        self.materials[mat_ind].sab = mat._sab
+        self.materials[mat_ind].temperature = mat.temperature
+
+        for nuclide in mat.nuclides:
+            name = nuclide[0].name
+            number = nuclide[1] * 1.0e24
+            self.number.set_atom_density(mat_id, name, number)
 
     def initialize_reaction_rates(self):
         """ Create reaction rates object. """
@@ -387,10 +388,12 @@ class OpenMCOperator(Operator):
         materials = []
 
         for key_mat in self.number.mat_to_ind:
+            mat_id = self.number.mat_to_ind[key_mat]
+
             mat = openmc.Material(material_id=int(key_mat))
 
-            mat_name = self.mat_name[int(key_mat)]
-            mat.temperature = self.materials.temperature[mat_name]
+            mat.temperature = self.materials[mat_id].temperature
+            mat._sab = self.materials[mat_id].sab
 
             for key_nuc in self.number.nuc_to_ind:
                 # Check if in participating nuclides
@@ -414,9 +417,6 @@ class OpenMCOperator(Operator):
                         self.number[key_mat, key_nuc] = 0.0
 
             mat.set_density(units='sum')
-
-            if mat_name in self.materials.sab:
-                mat.add_s_alpha_beta(self.materials.sab[mat_name])
 
             materials.append(mat)
 
@@ -660,7 +660,10 @@ class OpenMCOperator(Operator):
         # Reads cross_sections.xml to create a dictionary containing
         # participating (burning and not just decaying) nuclides.
 
-        filename = self.materials.cross_sections
+        try:
+            filename = os.environ["OPENMC_CROSS_SECTIONS"]
+        except KeyError:
+            filename = None
 
         self.participating_nuclides = set()
 
