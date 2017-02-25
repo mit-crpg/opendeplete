@@ -59,21 +59,33 @@ class Results(object):
 
         self.data = None
 
-    def allocate(self, operator, p_terms):
+    def allocate(self, volume, nuc_list, burn_list, p_terms):
         """ Allocates memory of Results.
 
         Parameters
         ----------
-        operator : Function
-            The operator used to generate these results.
+        volume : list of float
+            Volumes corresponding to materials in burn_list
+        nuc_list : list of str
+            A list of all nuclide names. Used for sorting the simulation.
+        burn_list : list of int
+            A list of all cell IDs to be burned.  Used for sorting the simulation.
         p_terms : int
             Terms of polynomial.
         """
-        self.p_terms = p_terms
-        self.volume = operator.geometry.volume
 
-        # Get mapping dictionaries from operator
-        self.cell_to_ind, self.nuc_to_ind = get_dict(operator.number)
+        self.volume = OrderedDict()
+        self.nuc_to_ind = OrderedDict()
+        self.cell_to_ind = OrderedDict()
+
+        for i, cell in enumerate(burn_list):
+            self.volume[cell] = volume[i]
+            self.cell_to_ind[cell] = i
+
+        for i, nuc in enumerate(nuc_list):
+            self.nuc_to_ind[nuc] = i
+
+        self.p_terms = p_terms
 
         # Create polynomial storage array
         self.data = np.zeros((self.n_cell, self.n_nuc, self.p_terms))
@@ -195,7 +207,7 @@ class Results(object):
         for cell in cell_list:
             cell_single_group = cell_group.create_group(cell)
             cell_single_group.attrs["index"] = self.cell_to_ind[cell]
-            cell_single_group.attrs["volume"] = self.volume[int(cell)]
+            cell_single_group.attrs["volume"] = self.volume[cell]
 
         nuc_group = handle.create_group("nuclides")
 

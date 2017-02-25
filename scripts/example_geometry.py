@@ -332,9 +332,6 @@ def generate_problem(n_rings=5, n_wedges=8):
     materials = generate_initial_number_density()
     geometry, volume, mapping, lower_left, upper_right = generate_geometry(n_rings, n_wedges)
 
-    # Generate volume dictionary
-    vol_dict = OrderedDict()
-
     # Apply distribmats
     cells = geometry.root_universe.get_all_cells()
     for cell_id in cells:
@@ -343,11 +340,10 @@ def generate_problem(n_rings=5, n_wedges=8):
             omc_mats = [density_to_mat(materials.initial_density[cell_type])
                         for cell_type in mapping]
             cell.fill = omc_mats
-            for mat in omc_mats:
-                vol_dict[mat.id] = volume['fuel']
+            cell.volume = volume['fuel']
         elif cell.name != '':
             omc_mat = density_to_mat(materials.initial_density[cell.name])
             cell.fill = omc_mat
-            vol_dict[omc_mat.id] = volume[cell.name]
+            cell.volume = volume[cell.name]
 
-    return geometry, vol_dict, materials, lower_left, upper_right
+    return geometry, materials, lower_left, upper_right

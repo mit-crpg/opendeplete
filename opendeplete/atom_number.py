@@ -43,6 +43,10 @@ class AtomNumber(object):
         Number of nucs.
     number : numpy.array
         Array storing total atoms indexed by the above dictionaries.
+    burn_nuc_list : list of str
+        A list of all nuclide material names. Used for sorting the simulation.
+    burn_mat_list : list of str
+        A list of all burning material names. Used for sorting the simulation.
     """
 
     def __init__(self, mat_to_ind, nuc_to_ind, volume, n_mat_burn, n_nuc_burn):
@@ -60,6 +64,10 @@ class AtomNumber(object):
         self.n_nuc_burn = n_nuc_burn
 
         self.number = np.zeros((self.n_mat, self.n_nuc))
+
+        # For performance, create storage for burn_nuc_list, burn_mat_list
+        self._burn_nuc_list = None
+        self._burn_mat_list = None
 
     def __getitem__(self, pos):
         """ Retrieves total atom number from AtomNumber.
@@ -193,3 +201,39 @@ class AtomNumber(object):
     def n_nuc(self):
         """Number of nucs."""
         return len(self.nuc_to_ind)
+
+    @property
+    def burn_nuc_list(self):
+        """ burn_nuc_list : list of str
+        A list of all nuclide material names. Used for sorting the simulation.
+        """
+
+        if self._burn_nuc_list is not None:
+            return self._burn_nuc_list
+
+        self._burn_nuc_list = [None] * self.n_nuc_burn
+
+        for nuc in self.nuc_to_ind:
+            ind = self.nuc_to_ind[nuc]
+            if ind < self.n_nuc_burn:
+                self._burn_nuc_list[ind] = nuc
+
+        return self._burn_nuc_list
+
+    @property
+    def burn_mat_list(self):
+        """ burn_mat_list : list of str
+        A list of all burning material names. Used for sorting the simulation.
+        """
+
+        if self._burn_mat_list is not None:
+            return self._burn_mat_list
+
+        self._burn_mat_list = [None] * self.n_mat_burn
+
+        for mat in self.mat_to_ind:
+            ind = self.mat_to_ind[mat]
+            if ind < self.n_mat_burn:
+                self._burn_mat_list[ind] = mat
+
+        return self._burn_mat_list

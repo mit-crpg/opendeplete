@@ -10,8 +10,9 @@ import scipy.sparse as sp
 
 from opendeplete.atom_number import AtomNumber
 from opendeplete.reaction_rates import ReactionRates
+from opendeplete.function import Operator
 
-class DummyGeometry:
+class DummyGeometry(Operator):
     """ This is a dummy geometry class with no statistical uncertainty.
 
     y_1' = sin(y_2) y_1 + cos(y_1) y_2
@@ -25,23 +26,18 @@ class DummyGeometry:
 
     """
 
-    def __init__(self):
-        """ Dummy function.  All inputs ignored."""
-        return
+    def __init__(self, settings):
+        Operator.__init__(self, settings)
 
-    def initialize(self):
-        """ Dummy function.  All inputs ignored."""
-        return
-
-    def function_evaluation(self, vec, settings):
+    def eval(self, vec, print_out=False):
         """ Evaluates F(y)
 
         Parameters
         ----------
         vec : list of numpy.array
             Total atoms to be used in function.
-        settings : Settings
-            Ignored.
+        print_out : bool, optional, ignored
+            Whether or not to print out time.
 
         Returns
         -------
@@ -73,31 +69,13 @@ class DummyGeometry:
     @property
     def volume(self):
         """
-        volume : OrderedDict[float]
-            Given a material ID, gives the volume of said material.
+        volume : list of float
+            Volume for a material.
         """
 
-        volume = {1 : 0}
+        volume = [0.0]
 
         return volume
-
-    @property
-    def number(self):
-        """
-        number : AtomNumber
-            The total number of atoms in the problem.
-        """
-
-        mat_to_ind = {"1" : 0}
-        nuc_to_ind = {"1" : 0, "2" : 1}
-        volume = {}
-
-        number = AtomNumber(mat_to_ind, nuc_to_ind, volume, 1, 2)
-
-        number["1", "1"] = 1.0
-        number["1", "2"] = 1.0
-
-        return number
 
     @property
     def nuc_list(self):
@@ -129,7 +107,7 @@ class DummyGeometry:
 
         return ReactionRates(cell_to_ind, nuc_to_ind, react_to_ind)
 
-    def start(self):
+    def initial_condition(self):
         """ Returns initial vector.
 
         Returns
@@ -140,11 +118,17 @@ class DummyGeometry:
 
         return [np.array((1.0, 1.0))]
 
-    def fill_nuclide_list(self):
-        """ Dummy function """
-        return
+    def get_results_info(self):
+        """ Returns volume list, cell lists, and nuc lists.
 
-    @property
-    def n_nuc(self):
-        """Number of nuclides considered in the decay chain."""
-        return len(self.chain.nuclides)
+        Returns
+        -------
+        volume : list of float
+            Volumes corresponding to materials in burn_list
+        nuc_list : list of str
+            A list of all nuclide names. Used for sorting the simulation.
+        burn_list : list of int
+            A list of all cell IDs to be burned.  Used for sorting the simulation.
+        """
+
+        return self.volume, self.nuc_list, self.burn_list
