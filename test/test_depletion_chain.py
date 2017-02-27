@@ -102,16 +102,18 @@ class TestDepletionChain(unittest.TestCase):
 
         cell_ind = {"10000": 0, "10001": 1}
         nuc_ind = {"A": 0, "B": 1, "C": 2}
-        react_ind = {"fission": 0, "(n,gamma)": 1}
+        react_ind = dep.react_to_ind
 
         react = reaction_rates.ReactionRates(cell_ind, nuc_ind, react_ind)
+
+        dep.nuc_to_react_ind = nuc_ind
 
         react["10000", "C", "fission"] = 1.0
         react["10000", "A", "(n,gamma)"] = 2.0
         react["10000", "B", "(n,gamma)"] = 3.0
         react["10000", "C", "(n,gamma)"] = 4.0
 
-        mat = dep.form_matrix(react, 0)
+        mat = dep.form_matrix(react[0, :, :])
         # Loss A, decay, (n, gamma)
         mat00 = -np.log(2) / 2.36520E+04 - 2
         # A -> B, decay, 0.6 branching ratio

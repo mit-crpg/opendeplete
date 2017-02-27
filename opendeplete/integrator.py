@@ -273,7 +273,7 @@ def compute_results(op, coeffs, x):
     results.allocate(op, coeffs.p_terms)
 
     # Get indexing terms
-    nuc_list, burn_list, non_participating = op.get_results_info()
+    nuc_list, burn_list = op.get_results_info()
 
     for mat_i, mat in enumerate(burn_list):
         mat_str = str(mat)
@@ -290,13 +290,6 @@ def compute_results(op, coeffs, x):
         # Add to results
         for nuc_i, nuc in enumerate(nuc_list):
             results[mat_str, nuc] = p[nuc_i, :]
-
-        # Add non-participating
-        for nuc in non_participating[mat]:
-            p_temp = np.zeros(coeffs.p_terms)
-            p_temp[0] = non_participating[mat][nuc]
-
-            results[mat_str, nuc] = p_temp
 
     return results
 
@@ -346,14 +339,18 @@ def matexp(mat, vec, dt, print_out=True):
         List of results of the matrix exponent.
     """
 
-    # Merge mat, vec into a list (yes, this is wasteful, blame concurrent
-    # having only a map instead of a starmap)
-
     t1 = time.time()
-    data = [(mat[i], vec[i], dt) for i in range(len(mat))]
+
+    def data_iterator(start, end):
+        """ Simple iterator over matrices and vectors."""
+        i = start
+
+        while i < end:
+            yield (mat[i], vec[i], dt)
+            i += 1
 
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        vec2 = executor.map(matexp_wrapper, data)
+        vec2 = executor.map(matexp_wrapper, data_iterator(0, len(mat)))
     t2 = time.time()
 
     if print_out:

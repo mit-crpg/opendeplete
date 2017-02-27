@@ -18,6 +18,7 @@ import argparse
 # Tests.  Add them as they're produced.
 
 suite_normal = [
+    "test.test_atom_number",
     "test.test_depletion_chain",
     "test.test_integrator",
     "test.test_integrator_coeffs",

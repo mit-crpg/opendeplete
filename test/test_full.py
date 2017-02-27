@@ -84,8 +84,8 @@ class TestFull(unittest.TestCase):
             self.assertIn(nuc, res_old[0].nuc_to_ind,
                           msg="Nuclide " + nuc + " not in old results.")
 
-        for cell in res_old[0].cell_to_ind:
-            for nuc in res_old[0].nuc_to_ind:
+        for cell in res_test[0].cell_to_ind:
+            for nuc in res_test[0].nuc_to_ind:
                 _, y_test = utilities.evaluate_single_nuclide(res_test, 0, cell,
                                                               nuc, use_interpolation=False)
                 _, y_old = utilities.evaluate_single_nuclide(res_old, 0, cell,

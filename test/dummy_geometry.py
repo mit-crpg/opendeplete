@@ -8,6 +8,7 @@ from collections import OrderedDict
 import numpy as np
 import scipy.sparse as sp
 
+from opendeplete.atom_number import AtomNumber
 from opendeplete.reaction_rates import ReactionRates
 
 class DummyGeometry:
@@ -81,19 +82,22 @@ class DummyGeometry:
         return volume
 
     @property
-    def total_number(self):
+    def number(self):
         """
-        total_number : OrderedDict of int to OrderedDict of str to float
-            The number density of a nuclide in a cell multiplied by the volume of
-            the cell.  Indexed as total_number[cell ID : int][nuclide : str].
+        number : AtomNumber
+            The total number of atoms in the problem.
         """
 
-        total_number = OrderedDict()
-        total_number["1"] = OrderedDict()
-        total_number["1"]["1"] = 1.0
-        total_number["1"]["2"] = 1.0
+        mat_to_ind = {"1" : 0}
+        nuc_to_ind = {"1" : 0, "2" : 1}
+        volume = {}
 
-        return total_number
+        number = AtomNumber(mat_to_ind, nuc_to_ind, volume, 1, 2)
+
+        number["1", "1"] = 1.0
+        number["1", "2"] = 1.0
+
+        return number
 
     @property
     def nuc_list(self):
@@ -135,29 +139,6 @@ class DummyGeometry:
         """
 
         return [np.array((1.0, 1.0))]
-
-    def get_non_participating_nuc(self):
-        """ Returns a nested dictionary of nuclides not participating.
-
-        Returns
-        -------
-        not_participating : dict of str to dict of str to float
-            Not participating nuclides, indexed by cell id and nuclide id.
-
-        """
-
-        not_participating = {}
-
-        for mat in self.burn_list:
-
-            not_participating[mat] = {}
-
-            # Get all nuclides that don't exist in chain but do in total_number
-            for nuc in self.total_number[mat]:
-                if nuc not in self.nuc_list:
-                    not_participating[mat][nuc] = self.total_number[mat][nuc]
-
-        return not_participating
 
     def fill_nuclide_list(self):
         """ Dummy function """

@@ -3,6 +3,7 @@
 This module implements the OpenDeplete -> OpenMC linkage.
 """
 
+import copy
 from collections import OrderedDict
 import concurrent.futures
 import os
@@ -12,10 +13,12 @@ import sys
 import time
 import xml.etree.ElementTree as ET
 
+import h5py
 import numpy as np
 import openmc
 from openmc.stats import Box
 
+from .atom_number import AtomNumber
 from .depletion_chain import matrix_wrapper
 from .reaction_rates import ReactionRates
 
@@ -145,13 +148,8 @@ class Geometry(object):
         Materials to be used for this simulation.
     seed : int
         The RNG seed used in last OpenMC run.
-    number_density : OrderedDict of int to OrderedDict of str to float
-        The number density of a nuclide in a material.  Indexed as
-        number_density[material ID : int][nuclide : str].
-    total_number : OrderedDict of int to OrderedDict of str to float
-        The number density of a nuclide in a material multiplied by the volume
-        of the material.  Indexed as total_number[material ID : int][nuclide :
-        str].
+    number : AtomNumber
+        Total number of atoms in simulation.
     participating_nuclides : set of str
         A set listing all unique nuclides available from cross_sections.xml.
     nuc_list : list of str
@@ -181,8 +179,7 @@ class Geometry(object):
         self.volume = volume
         self.materials = materials
         self.seed = 0
-        self.number_density = OrderedDict()
-        self.total_number = OrderedDict()
+        self.number = None
         self.participating_nuclides = None
         self.nuc_list = []
         self.burn_list = []
@@ -217,27 +214,87 @@ class Geometry(object):
         # Create reaction rate tables
         self.initialize_reaction_rates()
 
-        # Finally, calculate total number densities
-        self.calculate_total_number()
-
     def extract_all_materials(self):
         """ Iterate through all cells, create number density vectors from mats."""
         mat_ind = 0
 
-        # First, for each material, extract number density
+        # Get a set of materials, nuclides
+        mat_burn = set()
+        mat_not_burn = set()
+        nuc_set = set()
+
+        # Iterate once through the geometry to allocate arrays
         cells = self.geometry.get_all_material_cells()
         for cell in cells:
             name = cell.name
-            number_densities, mat_ids = extract_openmc_materials(cell)
-
-            for i, mat_id in enumerate(mat_ids):
-                self.number_density[mat_id] = number_densities[i]
-                self.mat_name[mat_id] = name
-
+            if isinstance(cell.fill, openmc.Material):
+                mat = cell.fill
+                for nuclide in mat.nuclides:
+                    nuc_set.add(nuclide[0].name)
                 if self.materials.burn[name]:
-                    self.burn_list.append(mat_id)
-                    self.burn_mat_to_ind[str(mat_id)] = mat_ind
-                    mat_ind += 1
+                    mat_burn.add(str(mat.id))
+                else:
+                    mat_not_burn.add(str(mat.id))
+                self.mat_name[mat.id] = name
+            else:
+                for mat in cell.fill:
+                    for nuclide in mat.nuclides:
+                        nuc_set.add(nuclide[0].name)
+                    if self.materials.burn[name]:
+                        mat_burn.add(str(mat.id))
+                    else:
+                        mat_not_burn.add(str(mat.id))
+                    self.mat_name[mat.id] = name
+
+        # Alphabetize the sets
+        mat_burn = sorted(list(mat_burn))
+        mat_not_burn = sorted(list(mat_not_burn))
+        nuc_set = sorted(list(nuc_set))
+
+        # Construct a global nuclide dictionary, burned first
+        nuc_dict = copy.copy(self.chain.nuclide_dict)
+
+        i = len(nuc_dict)
+
+        for nuc in nuc_set:
+            if nuc not in nuc_dict:
+                nuc_dict[nuc] = i
+                i += 1
+
+        # Same with materials
+        mat_dict = OrderedDict()
+        self.burn_mat_to_ind = OrderedDict()
+        self.burn_list = copy.copy(mat_burn)
+        i = 0
+        for mat in mat_burn:
+            mat_dict[mat] = i
+            self.burn_mat_to_ind[mat] = i
+            i += 1
+
+        for mat in mat_not_burn:
+            mat_dict[mat] = i
+            i += 1
+
+        n_mat_burn = len(mat_burn)
+        n_nuc_burn = len(self.chain.nuclide_dict)
+
+        self.number = AtomNumber(mat_dict, nuc_dict, self.volume, n_mat_burn, n_nuc_burn)
+
+        # Now extract the number densities and store
+        cells = self.geometry.get_all_material_cells()
+        for cell in cells:
+            if isinstance(cell.fill, openmc.Material):
+                mat = cell.fill
+                for nuclide in mat.nuclides:
+                    name = nuclide[0].name
+                    number = nuclide[1] * 1.0e24
+                    self.number.set_atom_density(str(mat.id), name, number)
+            else:
+                for mat in cell.fill:
+                    for nuclide in mat.nuclides:
+                        name = nuclide[0].name
+                        number = nuclide[1] * 1.0e24
+                        self.number.set_atom_density(str(mat.id), name, number)
 
     def initialize_reaction_rates(self):
         """ Create reaction rates object. """
@@ -245,6 +302,8 @@ class Geometry(object):
             self.burn_mat_to_ind,
             self.burn_nuc_to_ind,
             self.chain.react_to_ind)
+
+        self.chain.nuc_to_react_ind = self.burn_nuc_to_ind
 
     def function_evaluation(self, vec, settings, print_out=True):
         """ Runs a simulation.
@@ -333,19 +392,19 @@ class Geometry(object):
 
         materials = []
 
-        for key_mat in self.number_density:
-            mat = openmc.Material(material_id=key_mat)
+        for key_mat in self.number.mat_to_ind:
+            mat = openmc.Material(material_id=int(key_mat))
 
-            mat_name = self.mat_name[key_mat]
+            mat_name = self.mat_name[int(key_mat)]
             mat.temperature = self.materials.temperature[mat_name]
 
-            for key_nuc in self.number_density[key_mat]:
+            for key_nuc in self.number.nuc_to_ind:
                 # Check if in participating nuclides
                 if key_nuc in self.participating_nuclides:
-                    val = 1.0e-24*self.number_density[key_mat][key_nuc]
+                    val = 1.0e-24*self.number.get_atom_density(key_mat, key_nuc)
 
                     # If nuclide is zero, do not add to the problem.
-                    if val != 0.0:
+                    if val > 0.0:
                         if round_number:
                             val_magnitude = np.floor(np.log10(val))
                             val_scaled = val / 10**val_magnitude
@@ -354,6 +413,13 @@ class Geometry(object):
                             val = val_round * 10**val_magnitude
 
                         mat.add_nuclide(key_nuc, val)
+                    else:
+                        # Only output warnings if values are significantly
+                        # negative.  CRAM does not guarantee positive values.
+                        if val < -1.0e-21:
+                            print("WARNING: nuclide ", key_nuc, " in material ", key_mat,
+                                  " is negative (density = ", val, " at/barn-cm)")
+                        self.number[key_mat, key_nuc] = 0.0
 
             mat.set_density(units='sum')
 
@@ -419,7 +485,7 @@ class Geometry(object):
         # ----------------------------------------------------------------------
         # Create tallies for depleting regions
         tally_ind = 1
-        mat_filter_dep = openmc.MaterialFilter(self.burn_list)
+        mat_filter_dep = openmc.MaterialFilter([int(id) for id in self.burn_list])
         tallies_file = openmc.Tallies()
 
         nuc_superset = set()
@@ -427,11 +493,10 @@ class Geometry(object):
         # Create the set of all nuclides in the decay chain in cells marked for
         # burning in which the number density is greater than zero.
 
-        for mat in self.burn_list:
-            for key in self.number_density[mat]:
-                if key in self.participating_nuclides:
-                    if self.number_density[mat][key] > 0.0:
-                        nuc_superset.add(key)
+        for nuc in self.number.nuc_to_ind:
+            if nuc in self.participating_nuclides:
+                if np.sum(self.number[:, nuc]) > 0.0:
+                    nuc_superset.add(nuc)
 
         # For each reaction in the chain, for each nuclide, and for each
         # cell, make a tally
@@ -465,32 +530,20 @@ class Geometry(object):
             Generalize method away from process parallelism.
         """
 
-        # An issue with concurrent.futures is that it is far easier to write a
-        # map, so I need to concatenate the data into a single variable with
-        # which a map works.
-        input_list = []
-        for mat in self.burn_mat_to_ind:
-            mat_ind = self.burn_mat_to_ind[mat]
-            input_list.append((self.chain, self.reaction_rates, mat_ind))
+        n_mat = len(self.burn_mat_to_ind)
+
+        def data_iterator(start, end):
+            """ Simple iterator over chain / reaction rates"""
+            i = start
+
+            while i < end:
+                yield (self.chain, self.reaction_rates[i, :, :])
+                i += 1
 
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(matrix_wrapper, input_list)
+            matrices = executor.map(matrix_wrapper, data_iterator(0, n_mat))
 
         return list(matrices)
-
-    def calculate_total_number(self):
-        """ Calculates the total number of atoms.
-
-        Simply multiplies self.number_density[mat][nuclide] by
-        self.volume[mat] and saves the value in
-        self.total_number[mat][nuclide]
-        """
-
-        for mat in self.number_density:
-            self.total_number[mat] = OrderedDict()
-            for nuclide in self.number_density[mat]:
-                value = self.number_density[mat][nuclide] * self.volume[mat]
-                self.total_number[mat][nuclide] = value
 
     def total_density_list(self):
         """ Returns a list of total density lists.
@@ -504,46 +557,9 @@ class Geometry(object):
             A list of np.arrays containing total atoms of each cell.
         """
 
-        total_density = []
-
-        for mat_i, mat in enumerate(self.burn_list):
-
-            total_density.append([])
-
-            # Get all nuclides that exist in both chain and total_number
-            # in the order of chain
-            for nuc in self.nuc_list:
-                if nuc in self.total_number[mat]:
-                    total_density[mat_i].append(self.total_number[mat][nuc])
-                else:
-                    total_density[mat_i].append(0.0)
-            # Convert to np.array
-            total_density[mat_i] = np.array(total_density[mat_i])
+        total_density = [self.number.get_mat_slice(i) for i in range(self.number.n_mat_burn)]
 
         return total_density
-
-    def get_non_participating_nuc(self):
-        """ Returns a nested dictionary of nuclides not participating.
-
-        Returns
-        -------
-        not_participating : dict of str to dict of str to float
-            Not participating nuclides, indexed by cell id and nuclide id.
-
-        """
-
-        not_participating = {}
-
-        for mat in self.burn_list:
-
-            not_participating[mat] = {}
-
-            # Get all nuclides that don't exist in chain but do in total_number
-            for nuc in self.total_number[mat]:
-                if nuc not in self.nuc_list:
-                    not_participating[mat][nuc] = self.total_number[mat][nuc]
-
-        return not_participating
 
     def set_density(self, total_density):
         """ Sets density.
@@ -557,30 +573,10 @@ class Geometry(object):
             Total atoms.
         """
 
-        # First, ensure self.total_number is clear
-        for mat in self.burn_list:
-            for nuc in self.nuc_list:
-                if nuc in self.total_number[mat]:
-                    self.total_number[mat].pop(nuc, None)
+        # Fill in values
+        for i in range(self.number.n_mat_burn):
+            self.number.set_mat_slice(i, total_density[i])
 
-
-        for mat_i, mat in enumerate(self.burn_list):
-
-            # Update total_number first
-            for i, nuc in enumerate(self.nuc_list):
-                # Add a "infinitely dilute" quantity if negative
-                if total_density[mat_i][i] >= 0.0:
-                    self.total_number[mat][nuc] = total_density[mat_i][i]
-                else:
-                    self.total_number[mat][nuc] = 1.0
-                    print("WARNING! Negative Number Densities!")
-                    print("Material id = ", mat_i, " nuclide ", nuc,
-                          " number = ", total_density[mat_i][i])
-
-            # Then update number_density
-            for nuc in self.total_number[mat]:
-                self.number_density[mat][nuc] = self.total_number[mat][nuc] \
-                                                 / self.volume[mat]
 
     def fill_nuclide_list(self):
         """ Creates a list of nuclides in the order they will appear in vecs.
@@ -617,65 +613,67 @@ class Geometry(object):
         ----
             Provide units for new_power
         """
-        statepoint = openmc.StatePoint(filename)
 
-        k_combined = statepoint.k_combined[0]
-
-        # Generate new power dictionary
-
-        self.power = OrderedDict()
-
-        # ---------------------------------------------------------------------
-        # Unpack depletion list
-        tally_dep = statepoint.get_tally(id=1)
-
-        # Zero out reaction_rates
         self.reaction_rates[:, :, :] = 0.0
 
-        df_tally = tally_dep.get_pandas_dataframe()
-        # For each mat to be burned
-        for mat_str in self.burn_mat_to_ind:
-            mat = int(mat_str)
-            df_mat = df_tally[df_tally["material"] == mat]
+        file = h5py.File(filename, "r")
 
-            # For each nuclide that was tallied
-            for nuc in self.burn_nuc_to_ind:
+        k_combined = file["k_combined"][0]
 
-                # If density = 0, there was no tally
-                if nuc not in self.total_number[mat] or self.total_number[mat][nuc] == 0.0:
-                    continue
+        nuclides_binary = file["tallies/tally 1/nuclides"].value
+        nuclides = [nuc.decode('utf8') for nuc in nuclides_binary]
 
-                nuclide = self.chain.nuc_by_ind(nuc)
+        reactions_binary = file["tallies/tally 1/score_bins"].value
+        reactions = [react.decode('utf8') for react in reactions_binary]
 
-                df_nuclide = df_mat[df_mat["nuclide"] == nuc]
+        # Get fast map
+        nuc_ind = [self.reaction_rates.nuc_to_ind[nuc] for nuc in nuclides]
+        react_ind = [self.reaction_rates.react_to_ind[react] for react in reactions]
 
-                # For each reaction pathway
-                for j in range(nuclide.n_reaction_paths):
-                    # Extract tally
-                    tally_type = nuclide.reaction_type[j]
+        # Compute fission power
+        # TODO : improve this calculation
 
-                    k = self.reaction_rates.react_to_ind[tally_type]
-                    value = df_nuclide[df_nuclide["score"] ==
-                                       tally_type]["mean"].values[0]
+        power = 0.0
 
-                    # The reaction rates are normalized to total number of
-                    # atoms in the simulation.
-                    self.reaction_rates[mat_str, nuclide.name, k] = value \
-                        / self.total_number[mat][nuc]
+        power_vec = np.zeros(self.reaction_rates.n_nuc)
 
-                    # Calculate power if fission
-                    if tally_type == "fission":
-                        power = value * nuclide.fission_power
-                        if mat not in self.power:
-                            self.power[mat] = power
-                        else:
-                            self.power[mat] += power
+        fission_ind = self.reaction_rates.react_to_ind["fission"]
 
-        # ---------------------------------------------------------------------
-        # Normalize to power
-        original_power = sum(self.power.values())
+        for nuclide in self.chain.nuclides:
+            if nuclide.name in self.reaction_rates.nuc_to_ind:
+                ind = self.reaction_rates.nuc_to_ind[nuclide.name]
 
-        self.reaction_rates[:, :, :] *= (new_power / original_power)
+                power_vec[ind] = nuclide.fission_power
+
+        # Extract results
+        for i, mat in enumerate(self.burn_list):
+            # Get material results hyperslab
+            results = file["tallies/tally 1/results"][i, :, 0]
+
+            results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
+            number = np.zeros((self.reaction_rates.n_nuc))
+
+            # Expand into our memory layout
+            j = 0
+            for i_nuc_array, i_nuc_results in enumerate(nuc_ind):
+                nuc = nuclides[i_nuc_array]
+                for react in react_ind:
+                    results_expanded[i_nuc_results, react] = results[j]
+                    number[i_nuc_results] = self.number[mat, nuc]
+                    j += 1
+
+            # Add power
+            power += np.dot(results_expanded[:, fission_ind], power_vec)
+
+            # Divide by total number and store
+            for i_nuc_results in nuc_ind:
+                for react in react_ind:
+                    if number[i_nuc_results] != 0.0:
+                        results_expanded[i_nuc_results, react] /= number[i_nuc_results]
+
+            self.reaction_rates.rates[i, :, :] = results_expanded
+
+        self.reaction_rates[:, :, :] *= (new_power / power)
 
         return k_combined
 
@@ -726,12 +724,10 @@ class Geometry(object):
 
 def density_to_mat(dens_dict):
     """ Generates an OpenMC material from a cell ID and self.number_density.
-
     Parameters
     ----------
     m_id : int
         Cell ID.
-
     Returns
     -------
     openmc.Material
@@ -744,46 +740,6 @@ def density_to_mat(dens_dict):
     mat.set_density('sum')
 
     return mat
-
-def extract_openmc_materials(cell):
-    """ Extracts a dictionary from an OpenMC material object
-
-    Parameters
-    ----------
-    cell : openmc.Cell
-        The cell to extract from
-
-    Returns
-    -------
-    list of OrderedDict of str to float
-        A list of ordered dictionaries containing the nuclides of interest.
-    list of int
-        IDs of the materials used.
-    """
-
-    result = []
-    mat_id = []
-
-    if isinstance(cell.fill, openmc.Material):
-        nuc = OrderedDict()
-        for nuclide in cell.fill.nuclides:
-            name = nuclide[0].name
-            number = nuclide[1] * 1.0e24
-            nuc[name] = number
-        result.append(nuc)
-        mat_id.append(cell.fill.id)
-    else:
-        for mat in cell.fill:
-            nuc = OrderedDict()
-            for nuclide in mat.nuclides:
-                name = nuclide[0].name
-                number = nuclide[1] * 1.0e24
-                nuc[name] = number
-            result.append(nuc)
-            mat_id.append(mat.id)
-
-    return result, mat_id
-
 
 def clean_up_openmc():
     """ Resets all automatic indexing in OpenMC, as these get in the way. """

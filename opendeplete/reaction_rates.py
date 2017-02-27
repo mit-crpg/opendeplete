@@ -1,20 +1,20 @@
 """ReactionRates module.
 
-Just contains a dictionary of np.arrays to store reaction rates.
+An ndarray to store reaction rates with string, integer, or slice indexing.
 """
 
 import numpy as np
 
 
 class ReactionRates(object):
-    """ The Nuclide class.
+    """ ReactionRates class.
 
-    Contains everything in a depletion chain relating to a single nuclide.
+    An ndarray to store reaction rates with string, integer, or slice indexing.
 
     Parameters
     ----------
-    cell_to_ind : OrderedDict of str to int
-        A dictionary mapping cell ID as string to index.
+    mat_to_ind : OrderedDict of str to int
+        A dictionary mapping material ID as string to index.
     nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
     react_to_ind : OrderedDict of str to int
@@ -22,14 +22,14 @@ class ReactionRates(object):
 
     Attributes
     ----------
-    cell_to_ind : OrderedDict of str to int
+    mat_to_ind : OrderedDict of str to int
         A dictionary mapping cell ID as string to index.
     nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
     react_to_ind : OrderedDict of str to int
         A dictionary mapping reaction name as string to index.
-    n_cell : int
-        Number of cells.
+    n_mat : int
+        Number of materials.
     n_nuc : int
         Number of nucs.
     n_react : int
@@ -38,13 +38,13 @@ class ReactionRates(object):
         Array storing rates indexed by the above dictionaries.
     """
 
-    def __init__(self, cell_to_ind, nuc_to_ind, react_to_ind):
+    def __init__(self, mat_to_ind, nuc_to_ind, react_to_ind):
 
-        self.cell_to_ind = cell_to_ind
+        self.mat_to_ind = mat_to_ind
         self.nuc_to_ind = nuc_to_ind
         self.react_to_ind = react_to_ind
 
-        self.rates = np.zeros((self.n_cell, self.n_nuc, self.n_react))
+        self.rates = np.zeros((self.n_mat, self.n_nuc, self.n_react))
 
     def __getitem__(self, pos):
         """ Retrieves an item from reaction_rates.
@@ -52,7 +52,7 @@ class ReactionRates(object):
         Parameters
         ----------
         pos : tuple
-            A three-length tuple containing a cell index, a nuc index, and a
+            A three-length tuple containing a material index, a nuc index, and a
             reaction index.  These indexes can be strings (which get converted
             to integers via the dictionaries), integers used directly, or
             slices.
@@ -63,15 +63,15 @@ class ReactionRates(object):
             The value indexed from self.rates.
         """
 
-        cell, nuc, react = pos
-        if isinstance(cell, str):
-            cell = self.cell_to_ind[cell]
+        mat, nuc, react = pos
+        if isinstance(mat, str):
+            mat = self.mat_to_ind[mat]
         if isinstance(nuc, str):
             nuc = self.nuc_to_ind[nuc]
         if isinstance(react, str):
             react = self.react_to_ind[react]
 
-        return self.rates[cell, nuc, react]
+        return self.rates[mat, nuc, react]
 
     def __setitem__(self, pos, val):
         """ Sets an item from reaction_rates.
@@ -79,7 +79,7 @@ class ReactionRates(object):
         Parameters
         ----------
         pos : tuple
-            A three-length tuple containing a cell index, a nuc index, and a
+            A three-length tuple containing a material index, a nuc index, and a
             reaction index.  These indexes can be strings (which get converted
             to integers via the dictionaries), integers used directly, or
             slices.
@@ -87,20 +87,20 @@ class ReactionRates(object):
             The value to set the array to.
         """
 
-        cell, nuc, react = pos
-        if isinstance(cell, str):
-            cell = self.cell_to_ind[cell]
+        mat, nuc, react = pos
+        if isinstance(mat, str):
+            mat = self.mat_to_ind[mat]
         if isinstance(nuc, str):
             nuc = self.nuc_to_ind[nuc]
         if isinstance(react, str):
             react = self.react_to_ind[react]
 
-        self.rates[cell, nuc, react] = val
+        self.rates[mat, nuc, react] = val
 
     @property
-    def n_cell(self):
+    def n_mat(self):
         """Number of cells."""
-        return len(self.cell_to_ind)
+        return len(self.mat_to_ind)
 
     @property
     def n_nuc(self):

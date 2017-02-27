@@ -109,11 +109,7 @@ class TestIntegrator(unittest.TestCase):
         nuc_list = ["na", "nb"]
         burn_list = ["a", "b"]
 
-        non_participating = {}
-        non_participating["a"] = {"nd" : 7.0}
-        non_participating["b"] = {"nc" : 1.0}
-
-        op.get_results_info.return_value = nuc_list, burn_list, non_participating
+        op.get_results_info.return_value = nuc_list, burn_list
 
         results = integrator.compute_results(op, coeffs, x)
 
@@ -124,10 +120,8 @@ class TestIntegrator(unittest.TestCase):
         # Due to how mock handles inputs, assertion of arrays must be through numpy
         calls = [(("a", "na"), np.array((1.0, 1.5, -7.0, 5.0))),
                  (("a", "nb"), np.array((1.0, 0.2, -1.5, 1.0))),
-                 (("a", "nd"), np.array((7.0, 0.0, 0.0, 0.0))),
                  (("b", "na"), np.array((0.65, 0.2, -2.25, 1.5))),
-                 (("b", "nb"), np.array((0.1, 1.2, -2.3, 1.2))),
-                 (("b", "nc"), np.array((1.0, 0.0, 0.0, 0.0)))]
+                 (("b", "nb"), np.array((0.1, 1.2, -2.3, 1.2)))]
 
         actual_calls = results.__setitem__.call_args_list
 
