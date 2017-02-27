@@ -361,7 +361,7 @@ def get_dict(number):
     Parameters
     ----------
     number : AtomNumber
-        The object ot extract dictionaries from
+        The object to extract dictionaries from
 
     Returns
     -------
