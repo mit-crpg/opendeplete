@@ -410,7 +410,9 @@ class OpenMCOperator(Operator):
 
                         mat.add_nuclide(key_nuc, val)
                     else:
-                        if val < 0:
+                        # Only output warnings if values are significantly
+                        # negative.  CRAM does not guarantee positive values.
+                        if val < -1.0e-21:
                             print("WARNING: nuclide ", key_nuc, " in material ", key_mat,
                                   " is negative (density = ", val, " at/barn-cm)")
                         self.number[key_mat, key_nuc] = 0.0
