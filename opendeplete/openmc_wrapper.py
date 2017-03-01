@@ -163,8 +163,7 @@ class OpenMCOperator(Operator):
         self.burn_nuc_to_ind = None
 
         # Read depletion chain
-        self.chain = DepletionChain()
-        self.chain.xml_read(settings.chain_file)
+        self.chain = DepletionChain.xml_read(settings.chain_file)
 
         # Clear out OpenMC
         clean_up_openmc()
@@ -335,7 +334,7 @@ class OpenMCOperator(Operator):
         call(self.settings.openmc_call)
         time_openmc = time.time()
 
-        statepoint_name = "statepoint." + str(self.settings.batches) + ".h5"
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name)
@@ -610,7 +609,9 @@ class OpenMCOperator(Operator):
             if nuclide.name in self.reaction_rates.nuc_to_ind:
                 ind = self.reaction_rates.nuc_to_ind[nuclide.name]
 
-                power_vec[ind] = nuclide.fission_power
+                if 'fission' in nuclide.reaction_type:
+                    j = nuclide.reaction_type.index('fission')
+                    power_vec[ind] = nuclide.reaction_Q[j]*1e-6
 
         # Extract results
         for i, mat in enumerate(self.number.burn_mat_list):
@@ -618,15 +619,14 @@ class OpenMCOperator(Operator):
             results = file["tallies/tally 1/results"][i, :, 0]
 
             results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
-            number = np.zeros((self.reaction_rates.n_nuc))
+            number = np.zeros(self.reaction_rates.n_nuc)
 
             # Expand into our memory layout
             j = 0
-            for i_nuc_array, i_nuc_results in enumerate(nuc_ind):
-                nuc = nuclides[i_nuc_array]
+            for nuc, i_nuc_results in zip(nuclides, nuc_ind):
+                number[i_nuc_results] = self.number[mat, nuc]
                 for react in react_ind:
                     results_expanded[i_nuc_results, react] = results[j]
-                    number[i_nuc_results] = self.number[mat, nuc]
                     j += 1
 
             # Add power

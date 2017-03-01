@@ -7,6 +7,7 @@ import numpy as np
 
 from opendeplete import depletion_chain
 from opendeplete import reaction_rates
+from opendeplete import nuclide
 
 class TestDepletionChain(unittest.TestCase):
     """ Tests for DepletionChain class."""
@@ -17,7 +18,6 @@ class TestDepletionChain(unittest.TestCase):
 
         self.assertIsInstance(dep.nuclides, list)
         self.assertIsInstance(dep.nuclide_dict, OrderedDict)
-        self.assertIsInstance(dep.precursor_dict, OrderedDict)
         self.assertIsInstance(dep.react_to_ind, OrderedDict)
 
     def test_n_nuclides(self):
@@ -28,14 +28,16 @@ class TestDepletionChain(unittest.TestCase):
 
         self.assertEqual(dep.n_nuclides, 3)
 
+    def test_from_endf(self):
+        pass
+
     def test_xml_read(self):
         """ Read chain_test.xml and ensure all values are correct. """
         # Unfortunately, this routine touches a lot of the code, but most of
         # the components external to depletion_chain.py are simple storage
         # types.
 
-        dep = depletion_chain.DepletionChain()
-        dep.xml_read("chains/chain_test.xml")
+        dep = depletion_chain.DepletionChain.xml_read("chains/chain_test.xml")
 
         # Basic checks
         self.assertEqual(dep.n_nuclides, 3)
@@ -72,33 +74,59 @@ class TestDepletionChain(unittest.TestCase):
         self.assertEqual(nuc.name, "C")
         self.assertEqual(nuc.n_decay_paths, 0)
         self.assertEqual(nuc.n_reaction_paths, 2)
-        self.assertEqual(nuc.reaction_target, [0, "A"])
+        self.assertEqual(nuc.reaction_target, [None, "A"])
         self.assertEqual(nuc.reaction_type, ["fission", "(n,gamma)"])
 
         # Yield tests
-        yields = dep.yields
+        self.assertEqual(nuc.yield_energies, [0.0253])
+        self.assertEqual(list(nuc.yield_data.keys()), [0.0253])
+        self.assertEqual(nuc.yield_data[0.0253],
+                         [("A", 0.0292737), ("B", 0.002566345)])
 
-        self.assertEqual(yields.n_fis_prod, 2)
-        self.assertEqual(yields.n_precursors, 1)
-        self.assertEqual(yields.n_energies, 1)
-        self.assertEqual(yields.name, ["A", "B"])
-        self.assertEqual(yields.precursor_list, ["C"])
-        self.assertEqual(yields.energy_list, [2.53000E-02])
-        yield_A = yields.fis_yield_data[yields.fis_prod_dict["A"],
-                                        yields.energy_dict[2.53000E-02],
-                                        dep.precursor_dict["C"]]
-        self.assertEqual(yield_A, 0.0292737)
-        yield_B = yields.fis_yield_data[yields.fis_prod_dict["B"],
-                                        yields.energy_dict[2.53000E-02],
-                                        dep.precursor_dict["C"]]
-        self.assertEqual(yield_B, 0.002566345)
+    def test_xml_write(self):
+        """Test writing a depletion chain to XML."""
+
+        A = nuclide.Nuclide()
+        A.name = "A"
+        A.half_life = 2.36520e4
+        A.decay_target = ["B", "C"]
+        A.decay_type = ["beta1", "beta2"]
+        A.branching_ratio = [0.6, 0.4]
+        A.reaction_target = ["C"]
+        A.reaction_type = ["(n,gamma)"]
+        A.reaction_Q = [0.0]
+
+        B = nuclide.Nuclide()
+        B.name = "B"
+        B.half_life = 3.29040e4
+        B.decay_target = ["A"]
+        B.decay_type = ["beta", ]
+        B.branching_ratio = [1.0]
+        B.reaction_target = ["C"]
+        B.reaction_type = ["(n,gamma)"]
+        B.reaction_Q = [0.0]
+
+        C = nuclide.Nuclide()
+        C.name = "C"
+        C.reaction_target = [None, "A"]
+        C.reaction_type = ["fission", "(n,gamma)"]
+        C.reaction_Q = [2.0e8, 0.0]
+        C.yield_energies = [0.0253]
+        C.yield_data = {0.0253: [("A", 0.0292737), ("B", 0.002566345)]}
+
+        chain = depletion_chain.DepletionChain()
+        chain.nuclides = [A, B, C]
+        chain.xml_write('test.xml')
+
+        original = open('chains/chain_test.xml', 'r').read()
+        chain_xml = open('test.xml', 'r').read()
+        self.assertEqual(original, chain_xml)
 
     def test_form_matrix(self):
         """ Using chain_test, and a dummy reaction rate, compute the matrix. """
         # Relies on test_xml_read passing.
 
-        dep = depletion_chain.DepletionChain()
-        dep.xml_read("chains/chain_test.xml")
+        dep = depletion_chain.DepletionChain.xml_read("chains/chain_test.xml")
 
         cell_ind = {"10000": 0, "10001": 1}
         nuc_ind = {"A": 0, "B": 1, "C": 2}
