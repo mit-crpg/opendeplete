@@ -186,8 +186,6 @@ class OpenMCOperator(Operator):
         mat_not_burn = set()
         nuc_set = set()
 
-        need_vol = []
-
         volume = OrderedDict()
 
         # Iterate once through the geometry to allocate arrays
@@ -196,15 +194,13 @@ class OpenMCOperator(Operator):
             cell = cells[cell_id]
             name = cell.name
 
-            burn_mat_in_cell = []
-
             if isinstance(cell.fill, openmc.Material):
                 mat = cell.fill
                 for nuclide in mat.nuclides:
                     nuc_set.add(nuclide[0].name)
                 if mat.burnable:
                     mat_burn.add(str(mat.id))
-                    burn_mat_in_cell.append(str(mat.id))
+                    volume[str(mat.id)] = mat.volume
                 else:
                     mat_not_burn.add(str(mat.id))
                 self.mat_name[mat.id] = name
@@ -214,22 +210,19 @@ class OpenMCOperator(Operator):
                         nuc_set.add(nuclide[0].name)
                     if mat.burnable:
                         mat_burn.add(str(mat.id))
-                        burn_mat_in_cell.append(str(mat.id))
+                        volume[str(mat.id)] = mat.volume
                     else:
                         mat_not_burn.add(str(mat.id))
                     self.mat_name[mat.id] = name
 
-            if len(burn_mat_in_cell) > 0:
-                # Check that we have a volume
-                if cell.volume is not None:
-                    for mat_id in burn_mat_in_cell:
-                        volume[mat_id] = cell.volume
-                else:
-                    need_vol.append(cell.id)
+        need_vol = []
 
-        if need_vol:
-            print("ERROR : Need volumes for cells: " + str(need_vol))
-            exit()
+        for mat_id in volume:
+            if volume[mat_id] is None:
+                need_vol.append(mat_id)
+
+        if len(need_vol) > 0:
+            exit("Need volumes for materials: " + str(need_vol))
 
         # Alphabetize the sets
         mat_burn = sorted(list(mat_burn))
