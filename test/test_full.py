@@ -28,7 +28,7 @@ class TestFull(unittest.TestCase):
         n_wedges = 4
 
         # Load geometry from example
-        geometry, volume, materials, lower_left, upper_right = \
+        geometry, lower_left, upper_right = \
             example_geometry.generate_problem(n_rings=n_rings, n_wedges=n_wedges)
 
         # Create dt vector for 3 steps with 15 day timesteps
@@ -39,7 +39,7 @@ class TestFull(unittest.TestCase):
         dt = np.repeat([dt1], N)
 
         # Create settings variable
-        settings = opendeplete.Settings()
+        settings = opendeplete.OpenMCSettings()
 
         settings.chain_file = "chains/chain_simple.xml"
         settings.openmc_call = "openmc"
@@ -57,8 +57,7 @@ class TestFull(unittest.TestCase):
         settings.dt_vec = dt
         settings.output_dir = "test_full"
 
-        op = opendeplete.Operator()
-        op.geometry_fill(geometry, volume, materials, settings)
+        op = opendeplete.OpenMCOperator(geometry, settings)
 
         # Perform simulation using the predictor algorithm
         opendeplete.integrate(op, opendeplete.predictor_c0)

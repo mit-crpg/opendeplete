@@ -42,7 +42,7 @@ def integrate(operator, coeffs, print_out=True):
     os.chdir(operator.settings.output_dir)
 
     # Generate initial conditions
-    vec = operator.start()
+    vec = operator.initial_condition()
 
     # Initial configuration
     current_time = 0.0
@@ -268,12 +268,12 @@ def compute_results(op, coeffs, x):
         A mostly-filled results object for saving to disk.
     """
 
+    # Get indexing terms
+    vol_list, nuc_list, burn_list = op.get_results_info()
+
     # Create results
     results = Results()
-    results.allocate(op, coeffs.p_terms)
-
-    # Get indexing terms
-    nuc_list, burn_list = op.get_results_info()
+    results.allocate(vol_list, nuc_list, burn_list, coeffs.p_terms)
 
     for mat_i, mat in enumerate(burn_list):
         mat_str = str(mat)

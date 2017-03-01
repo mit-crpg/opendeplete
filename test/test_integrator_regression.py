@@ -21,15 +21,10 @@ class TestIntegratorRegression(unittest.TestCase):
         """ Integral regression test of integrator algorithm using CE/CM. """
 
         settings = opendeplete.Settings()
-
-        settings.chain_file = "../chains/chain_simple.xml"
-
         settings.dt_vec = [0.75, 0.75]
         settings.output_dir = "test_integrator_regression"
 
-        op = opendeplete.Operator()
-        op.geometry = dummy_geometry.DummyGeometry()
-        op.settings = settings
+        op = dummy_geometry.DummyGeometry(settings)
 
         # Perform simulation using the MCNPX/MCNP6 algorithm
         opendeplete.integrate(op, opendeplete.ce_cm_c1, print_out=False)

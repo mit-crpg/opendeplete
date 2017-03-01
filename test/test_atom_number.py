@@ -60,6 +60,26 @@ class TestAtomNumber(unittest.TestCase):
 
         self.assertEqual(number.n_nuc, 3)
 
+    def test_burn_nuc_list(self):
+        """ Test the list of burned nuclides property """
+        mat_to_ind = {"10000" : 0, "10001" : 1}
+        nuc_to_ind = {"U238" : 0, "U235" : 1, "Gd157" : 2}
+        volume = {"10000" : 0.38, "10001" : 0.21}
+
+        number = atom_number.AtomNumber(mat_to_ind, nuc_to_ind, volume, 2, 2)
+
+        self.assertEqual(number.burn_nuc_list, ["U238", "U235"])
+
+    def test_burn_mat_list(self):
+        """ Test the list of burned nuclides property """
+        mat_to_ind = {"10000" : 0, "10001" : 1, "10002" : 2}
+        nuc_to_ind = {"U238" : 0, "U235" : 1, "Gd157" : 2}
+        volume = {"10000" : 0.38, "10001" : 0.21}
+
+        number = atom_number.AtomNumber(mat_to_ind, nuc_to_ind, volume, 2, 2)
+
+        self.assertEqual(number.burn_mat_list, ["10000", "10001"])
+
     def test_density_indexing(self):
         """Tests the get and set_atom_density routines simultaneously."""
 

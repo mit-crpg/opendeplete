@@ -106,15 +106,16 @@ class TestIntegrator(unittest.TestCase):
 
         op = MagicMock()
 
+        vol_list = [1.0, 1.0]
         nuc_list = ["na", "nb"]
         burn_list = ["a", "b"]
 
-        op.get_results_info.return_value = nuc_list, burn_list
+        op.get_results_info.return_value = vol_list, nuc_list, burn_list
 
         results = integrator.compute_results(op, coeffs, x)
 
         # Assert allocated
-        results.allocate.assert_called_once_with(op, 4)
+        results.allocate.assert_called_once_with(vol_list, nuc_list, burn_list, 4)
 
         # Assert calls
         # Due to how mock handles inputs, assertion of arrays must be through numpy

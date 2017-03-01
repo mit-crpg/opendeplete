@@ -250,7 +250,6 @@ class DepletionChain(object):
                                 yield_val = self.yields.fis_yield_data[k, 0, m] * path_rate
                                 if yield_val != 0.0:
                                     matrix[l, i] += yield_val
-                                    
 
         # Use DOK matrix as intermediate representation, then convert to CSR and return
         matrix_dok = sp.dok_matrix((self.n_nuclides, self.n_nuclides))
