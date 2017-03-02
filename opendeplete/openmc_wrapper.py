@@ -7,6 +7,7 @@ import copy
 from collections import OrderedDict
 import concurrent.futures
 import os
+from itertools import repeat
 import random
 from subprocess import call
 import sys
@@ -260,8 +261,7 @@ class OpenMCOperator(Operator):
 
         # Now extract the number densities and store
         cells = self.geometry.get_all_material_cells()
-        for cell_id in cells:
-            cell = cells[cell_id]
+        for cell in cells.values():
             if isinstance(cell.fill, openmc.Material):
                 self.set_number_from_mat(cell.fill)
             else:
@@ -438,9 +438,13 @@ class OpenMCOperator(Operator):
         settings_file.particles = particles
         settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
                                                        self.settings.upper_right))
-        settings_file.entropy_lower_left = self.settings.lower_left
-        settings_file.entropy_upper_right = self.settings.upper_right
-        settings_file.entropy_dimension = self.settings.entropy_dimension
+
+        if self.settings.entropy_dimension is not None:
+            entropy_mesh = openmc.Mesh()
+            entropy_mesh.lower_left = self.settings.lower_left
+            entropy_mesh.upper_right = self.settings.upper_right
+            entropy_mesh.dimension = self.settings.entropy_dimension
+            settings_file.entropy_mesh = entropy_mesh
 
         # Set seed
         if self.settings.constant_seed is not None:
@@ -448,8 +452,7 @@ class OpenMCOperator(Operator):
         else:
             seed = random.randint(1, sys.maxsize-1)
 
-        self.seed = seed
-        settings_file.seed = seed
+        settings_file.seed = self.seed = seed
 
         settings_file.export_to_xml()
 
@@ -460,8 +463,6 @@ class OpenMCOperator(Operator):
         currently in the problem, this function automatically generates a
         tally.xml for the simulation.
         """
-        chain = self.chain
-
         # ----------------------------------------------------------------------
         # Create tallies for depleting regions
         tally_ind = 1
@@ -482,10 +483,10 @@ class OpenMCOperator(Operator):
         # cell, make a tally
         tally_dep = openmc.Tally(tally_id=tally_ind)
         for key in nuc_superset:
-            if key in chain.nuclide_dict:
+            if key in self.chain.nuclide_dict:
                 tally_dep.nuclides.append(key)
 
-        for reaction in chain.react_to_ind:
+        for reaction in self.chain.react_to_ind:
             tally_dep.scores.append(reaction)
 
         tallies_file.append(tally_dep)
@@ -512,16 +513,9 @@ class OpenMCOperator(Operator):
 
         n_mat = len(self.burn_mat_to_ind)
 
-        def data_iterator(start, end):
-            """ Simple iterator over chain / reaction rates"""
-            i = start
-
-            while i < end:
-                yield (self.chain, self.reaction_rates[i, :, :])
-                i += 1
-
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(matrix_wrapper, data_iterator(0, n_mat))
+            matrices = executor.map(matrix_wrapper, zip(
+                repeat(self.chain, n_mat), self.reaction_rates.rates))
 
         return list(matrices)
 
