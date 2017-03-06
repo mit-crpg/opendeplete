@@ -87,22 +87,26 @@ def evaluate_reaction_rate(results, cell, nuc, rxn):
         Reaction rate.
     """
 
-    n_points = len(results) + 1
-    time = np.zeros(n_points)
-    rate = np.zeros(n_points)
-
     ind_final = results[0].final_stage
 
+    if len(results[0].rates) > ind_final:
+        n_points = len(results) + 1
+    else:
+        n_points = len(results)
+
+    time = np.zeros(n_points)
+    rate = np.zeros(n_points)
     # Evaluate value in each region
     for i, result in enumerate(results):
 
         time[i] = result.time[0]
-        time[i + 1] = result.time[1]
 
         poly = result[cell, nuc]
-
         rate[i] = result.rates[0][cell, nuc, rxn] * poly[0]
-        rate[i + 1] = result.rates[ind_final][cell, nuc, rxn] * np.sum(poly)
+
+        if len(result.rates) > ind_final:
+            time[i + 1] = result.time[1]
+            rate[i + 1] = result.rates[ind_final][cell, nuc, rxn] * np.sum(poly)
 
     return time, rate
 
@@ -122,19 +126,24 @@ def evaluate_eigenvalue(results):
         Eigenvalue.
     """
 
-    n_points = len(results) + 1
+    ind_final = results[0].final_stage
+
+    if len(results[0].rates) > ind_final:
+        n_points = len(results) + 1
+    else:
+        n_points = len(results)
+
     time = np.zeros(n_points)
     eigenvalue = np.zeros(n_points)
-
-    ind_final = results[0].final_stage
 
     # Evaluate value in each region
     for i, result in enumerate(results):
 
         time[i] = result.time[0]
-        time[i + 1] = result.time[1]
-
         eigenvalue[i] = result.k[0]
-        eigenvalue[i + 1] = result.k[ind_final]
+
+        if len(result.rates) > ind_final:
+            time[i + 1] = result.time[1]
+            eigenvalue[i + 1] = result.k[ind_final]
 
     return time, eigenvalue

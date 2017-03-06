@@ -27,7 +27,7 @@ class TestIntegratorRegression(unittest.TestCase):
         op = dummy_geometry.DummyGeometry(settings)
 
         # Perform simulation using the MCNPX/MCNP6 algorithm
-        opendeplete.integrate(op, opendeplete.ce_cm_c1, print_out=False)
+        opendeplete.integrate(op, opendeplete.ce_cm_c0, print_out=False)
 
         # Load the files
         res = results.read_results(settings.output_dir + "/results")

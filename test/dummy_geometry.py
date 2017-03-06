@@ -38,8 +38,6 @@ class DummyGeometry(Operator):
 
         Returns
         -------
-        mat : list of scipy.sparse.csr_matrix
-            Matrices for the next step.
         k : float
             Zero.
         rates : ReactionRates
@@ -48,8 +46,40 @@ class DummyGeometry(Operator):
             Zero.
         """
 
-        y_1 = vec[0][0]
-        y_2 = vec[0][1]
+        cell_to_ind = {"1" : 0}
+        nuc_to_ind = {"1" : 0, "2" : 1}
+        react_to_ind = {"1" : 0}
+
+        reaction_rates = ReactionRates(cell_to_ind, nuc_to_ind, react_to_ind)
+
+        reaction_rates[0, 0, 0] = vec[0][0]
+        reaction_rates[0, 1, 0] = vec[0][1]
+
+        # Create a fake rates object
+
+        return 0.0, reaction_rates, 0
+
+    def form_matrix(self, y, mat):
+        """ Forms the f(y) matrix in y' = f(y)y.
+
+        Nominally a depletion matrix, this is abstracted on the off chance
+        that the function f has nothing to do with depletion at all.
+
+        Parameters
+        ----------
+        y : numpy.ndarray
+            An array representing y.
+        mat : int
+            Material id.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Sparse matrix representing f(y).
+        """
+
+        y_1 = y[mat, 0, 0]
+        y_2 = y[mat, 1, 0]
 
         mat = np.zeros((2, 2))
         a11 = np.sin(y_2)
@@ -57,20 +87,18 @@ class DummyGeometry(Operator):
         a21 = -np.cos(y_2)
         a22 = np.sin(y_1)
 
-        mat = [sp.csr_matrix(np.array([[a11, a12], [a21, a22]]))]
+        mat = sp.csr_matrix(np.array([[a11, a12], [a21, a22]]))
 
-        # Create a fake rates object
-
-        return mat, 0.0, self.reaction_rates, 0
+        return mat
 
     @property
     def volume(self):
         """
-        volume : list of float
-            Volume for a material.
+        volume : dict of str float
+            Volumes of material
         """
 
-        volume = [0.0]
+        volume = {"1": 0.0}
 
         return volume
 
@@ -91,6 +119,12 @@ class DummyGeometry(Operator):
         """
 
         return ["1"]
+
+    @property
+    def mat_tally_ind(self):
+        """Maps cell name to index in global geometry."""
+        return {"1": 0}
+
 
     @property
     def reaction_rates(self):
@@ -120,12 +154,14 @@ class DummyGeometry(Operator):
 
         Returns
         -------
-        volume : list of float
-            Volumes corresponding to materials in burn_list
+        volume : dict of str float
+            Volumes corresponding to materials in full_burn_dict
         nuc_list : list of str
             A list of all nuclide names. Used for sorting the simulation.
         burn_list : list of int
             A list of all cell IDs to be burned.  Used for sorting the simulation.
+        full_burn_dict : OrderedDict of str to int
+            Maps cell name to index in global geometry.
         """
 
-        return self.volume, self.nuc_list, self.burn_list
+        return self.volume, self.nuc_list, self.burn_list, self.mat_tally_ind

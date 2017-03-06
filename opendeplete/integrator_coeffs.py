@@ -108,7 +108,7 @@ ce_cm_c1 = Integrator()
 ce_cm_c1.a = np.zeros((2, 2, 2))
 ce_cm_c1.a[0, 0, 0] = 1/2
 ce_cm_c1.a[1, 0, 1] = 1
-ce_cm_c1.d = np.zeros((3, 3))
+ce_cm_c1.d = np.zeros((2, 2))
 ce_cm_c1.d[0, 0] = 1
 ce_cm_c1.d[1, 0] = 1
 # y0 terms
@@ -139,3 +139,24 @@ ce_cm_c1.fsal = True
 ce_cm_c1.final_ind = 2
 ce_cm_c1.p_terms = 4
 ce_cm_c1.int_terms = 7
+
+# CE-CM Predictor corrector algorithm with C0 continuous interpolation
+ce_cm_c0 = Integrator()
+ce_cm_c0.a = np.zeros((2, 2, 2))
+ce_cm_c0.a[0, 0, 0] = 1/2
+ce_cm_c0.a[1, 0, 1] = 1
+ce_cm_c0.d = np.zeros((2, 2))
+ce_cm_c0.d[0, 0] = 1
+ce_cm_c0.d[1, 0] = 1
+# y0 terms
+ce_cm_c0.p = np.zeros((2, 3))
+ce_cm_c0.p[0, 0] = 1
+ce_cm_c0.p[1, 0] = -1
+# Skip intermediate stage
+# y1 terms
+ce_cm_c0.p[0, 2] = 0
+ce_cm_c0.p[1, 2] = 1
+ce_cm_c0.fsal = False
+ce_cm_c0.final_ind = 2
+ce_cm_c0.p_terms = 2
+ce_cm_c0.int_terms = 3

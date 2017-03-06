@@ -270,22 +270,3 @@ class DepletionChain(object):
             Nuclide object that corresponds to ind.
         """
         return self.nuclides[self.nuclide_dict[ind]]
-
-
-def matrix_wrapper(input_tuple):
-    """ Parallel wrapper for matrix formation.
-
-    This wrapper is used whenever a pmap/map-type function is used to make
-    matrices for each cell in parallel.
-
-    Parameters
-    ----------
-    input_tuple : tuple of DepletionChain, numpy.ndarray
-        Index 0 is the chain, index 1 is the reaction rate array.
-
-    Returns
-    -------
-    scipy.sparse.csr_matrix
-        The matrix for this reaction rate.
-    """
-    return input_tuple[0].form_matrix(input_tuple[1])

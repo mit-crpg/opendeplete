@@ -4,9 +4,11 @@ Contains results generation and saving capabilities.
 """
 
 from collections import OrderedDict
+import copy
 
 import numpy as np
 import h5py
+from mpi4py import MPI
 
 from .reaction_rates import ReactionRates
 
@@ -17,14 +19,16 @@ class Results(object):
 
     Attributes
     ----------
+    comm : mpi4py.MPI.Intracomm
+        The communicator to work with.
     k : list of float
         Eigenvalue at beginning, end of step.
     seeds : list of int
         Seeds for each substep.
     time : list of float
         Time at beginning, end of step, in seconds.
-    n_cell : int
-        Number of cells.
+    n_mat : int
+        Number of mats.
     n_nuc : int
         Number of nuclides.
     p_terms : int
@@ -32,19 +36,24 @@ class Results(object):
     rates : list of ReactionRates
         The reaction rates for each substep.
     volume : OrderedDict of int to float
-        Dictionary mapping cell id to volume.
+        Dictionary mapping mat id to volume.
     final_stage : int
         Index of final stage
-    cell_to_ind : OrderedDict of str to int
-        A dictionary mapping cell ID as string to index.
+    mat_to_ind : OrderedDict of str to int
+        A dictionary mapping mat ID as string to index.
     nuc_to_ind : OrderedDict of str to int
         A dictionary mapping nuclide name as string to index.
+    mat_to_hdf5_ind : OrderedDict of str to int
+        A dictionary mapping mat ID as string to global index.
+    n_hdf5_mats : int
+        Number of materials in entire geometry
     data : numpy.array
-        Number density polynomial coefficients, stored by cell, then by
+        Number density polynomial coefficients, stored by mat, then by
         nuclide.
     """
 
     def __init__(self):
+        self.comm = MPI.COMM_WORLD
         self.k = None
         self.seeds = None
         self.time = None
@@ -53,33 +62,36 @@ class Results(object):
         self.volume = None
         self.final_stage = None
 
-        self.cell_to_ind = None
+        self.mat_to_ind = None
         self.nuc_to_ind = None
+        self.mat_to_hdf5_ind = None
 
         self.data = None
 
-    def allocate(self, volume, nuc_list, burn_list, p_terms):
+    def allocate(self, volume, nuc_list, burn_list, full_burn_dict, p_terms):
         """ Allocates memory of Results.
 
         Parameters
         ----------
-        volume : list of float
-            Volumes corresponding to materials in burn_list
+        volume : dict of str float
+            Volumes corresponding to materials in full_burn_dict
         nuc_list : list of str
             A list of all nuclide names. Used for sorting the simulation.
         burn_list : list of int
-            A list of all cell IDs to be burned.  Used for sorting the simulation.
+            A list of all mat IDs to be burned.  Used for sorting the simulation.
+        full_burn_dict : dict of str to int
+            Map of material name to id in global geometry.
         p_terms : int
             Terms of polynomial.
         """
 
-        self.volume = OrderedDict()
+        self.volume = copy.copy(volume)
         self.nuc_to_ind = OrderedDict()
-        self.cell_to_ind = OrderedDict()
+        self.mat_to_ind = OrderedDict()
+        self.mat_to_hdf5_ind = copy.copy(full_burn_dict)
 
-        for i, cell in enumerate(burn_list):
-            self.volume[cell] = volume[i]
-            self.cell_to_ind[cell] = i
+        for i, mat in enumerate(burn_list):
+            self.mat_to_ind[mat] = i
 
         for i, nuc in enumerate(nuc_list):
             self.nuc_to_ind[nuc] = i
@@ -87,17 +99,22 @@ class Results(object):
         self.p_terms = p_terms
 
         # Create polynomial storage array
-        self.data = np.zeros((self.n_cell, self.n_nuc, self.p_terms))
+        self.data = np.zeros((self.n_mat, self.n_nuc, self.p_terms))
 
     @property
-    def n_cell(self):
-        """Number of cells."""
-        return len(self.cell_to_ind)
+    def n_mat(self):
+        """Number of mats."""
+        return len(self.mat_to_ind)
 
     @property
     def n_nuc(self):
         """Number of nuclides."""
         return len(self.nuc_to_ind)
+
+    @property
+    def n_hdf5_mats(self):
+        """Number of materials in entire geometry."""
+        return len(self.mat_to_hdf5_ind)
 
     def __getitem__(self, pos):
         """ Retrieves an item from results.
@@ -105,7 +122,7 @@ class Results(object):
         Parameters
         ----------
         pos : tuple
-            A two-length tuple containing a cell index and a nuc index.  These
+            A two-length tuple containing a mat index and a nuc index.  These
             indexes can be strings (which get converted to integers via the
             dictionaries), integers used directly, or slices.
 
@@ -115,13 +132,13 @@ class Results(object):
             The polynomial coefficients at the index of interest.
         """
 
-        cell, nuc = pos
-        if isinstance(cell, str):
-            cell = self.cell_to_ind[cell]
+        mat, nuc = pos
+        if isinstance(mat, str):
+            mat = self.mat_to_ind[mat]
         if isinstance(nuc, str):
             nuc = self.nuc_to_ind[nuc]
 
-        return self.data[cell, nuc, :]
+        return self.data[mat, nuc, :]
 
     def __setitem__(self, pos, val):
         """ Sets an item from results.
@@ -129,27 +146,27 @@ class Results(object):
         Parameters
         ----------
         pos : tuple
-            A two-length tuple containing a cell index and a nuc index.  These
+            A two-length tuple containing a mat index and a nuc index.  These
             indexes can be strings (which get converted to integers via the
             dictionaries), integers used directly, or slices.
         val : numpy.array
             The value to set the polynomial to.
         """
 
-        cell, nuc = pos
-        if isinstance(cell, str):
-            cell = self.cell_to_ind[cell]
+        mat, nuc = pos
+        if isinstance(mat, str):
+            mat = self.mat_to_ind[mat]
         if isinstance(nuc, str):
             nuc = self.nuc_to_ind[nuc]
 
-        self.data[cell, nuc, :] = val
+        self.data[mat, nuc, :] = val
 
-    def evaluate(self, cell, nuc, time):
-        """ Evaluate a polynomial for a given cell-nuclide combination.
+    def evaluate(self, mat, nuc, time):
+        """ Evaluate a polynomial for a given mat-nuclide combination.
 
         Parameters
         ----------
-        cell : int or str
+        mat : int or str
             Cell index to evaluate at.
         nuc : int or str
             Nuclide to evaluate at.
@@ -165,7 +182,7 @@ class Results(object):
         # Convert time into unitless time
         time_unitless = (time - self.time[0]) / (self.time[1] - self.time[0])
 
-        return np.polynomial.polynomial.polyval(time_unitless, self[cell, nuc])
+        return np.polynomial.polynomial.polyval(time_unitless, self[mat, nuc])
 
     def create_hdf5(self, handle):
         """ Creates file structure for a blank HDF5 file.
@@ -178,35 +195,34 @@ class Results(object):
 
         # Create and save the 5 dictionaries:
         # quantities
-        #   self.cell_to_ind -> self.volume (TODO: support for changing volumes)
+        #   self.mat_to_ind -> self.volume (TODO: support for changing volumes)
         #   self.nuc_to_ind
         # reactions
         #   self.rates[0].nuc_to_ind (can be different from above, above is superset)
         #   self.rates[0].react_to_ind
         # these are shared by every step of the simulation, and should be deduplicated.
 
-        # Store concentration cell and nuclide dictionaries (along with volumes)
+        # Store concentration mat and nuclide dictionaries (along with volumes)
 
         handle.create_dataset("version", data=RESULTS_VERSION)
         handle.create_dataset("final index", data=self.final_stage)
 
-        cell_list = sorted(self.cell_to_ind.keys())
         nuc_list = sorted(self.nuc_to_ind.keys())
         rxn_list = sorted(self.rates[0].react_to_ind.keys())
 
-        n_cells = len(cell_list)
+        n_mats = self.n_hdf5_mats
         n_nuc_number = len(nuc_list)
         n_nuc_rxn = len(self.rates[0].nuc_to_ind)
         n_rxn = len(rxn_list)
         p_terms = self.p_terms
         n_stages = len(self.rates)
 
-        cell_group = handle.create_group("cells")
+        mat_group = handle.create_group("cells")
 
-        for cell in cell_list:
-            cell_single_group = cell_group.create_group(cell)
-            cell_single_group.attrs["index"] = self.cell_to_ind[cell]
-            cell_single_group.attrs["volume"] = self.volume[cell]
+        for mat in self.mat_to_hdf5_ind:
+            mat_single_group = mat_group.create_group(mat)
+            mat_single_group.attrs["index"] = self.mat_to_hdf5_ind[mat]
+            mat_single_group.attrs["volume"] = self.volume[mat]
 
         nuc_group = handle.create_group("nuclides")
 
@@ -224,24 +240,20 @@ class Results(object):
 
         # Construct array storage
 
-        handle.create_dataset("number", (0, n_cells, n_nuc_number, p_terms),
-                              maxshape=(None, n_cells, n_nuc_number, p_terms),
-                              compression="gzip",
-                              shuffle=True,
+        handle.create_dataset("number", (1, n_mats, n_nuc_number, p_terms),
+                              maxshape=(None, n_mats, n_nuc_number, p_terms),
                               dtype='float64')
 
-        handle.create_dataset("reaction rates", (0, n_stages, n_cells, n_nuc_rxn, n_rxn),
-                              maxshape=(None, n_stages, n_cells, n_nuc_rxn, n_rxn),
-                              compression="gzip",
-                              shuffle=True,
+        handle.create_dataset("reaction rates", (1, n_stages, n_mats, n_nuc_rxn, n_rxn),
+                              maxshape=(None, n_stages, n_mats, n_nuc_rxn, n_rxn),
                               dtype='float64')
 
-        handle.create_dataset("eigenvalues", (0, n_stages),
+        handle.create_dataset("eigenvalues", (1, n_stages),
                               maxshape=(None, n_stages), dtype='float64')
 
-        handle.create_dataset("seeds", (0, n_stages), maxshape=(None, n_stages), dtype='int64')
+        handle.create_dataset("seeds", (1, n_stages), maxshape=(None, n_stages), dtype='int64')
 
-        handle.create_dataset("time", (0, 2), maxshape=(None, 2), dtype='float64')
+        handle.create_dataset("time", (1, 2), maxshape=(None, 2), dtype='float64')
 
     def to_hdf5(self, handle, index):
         """ Converts results object into an hdf5 object.
@@ -255,7 +267,10 @@ class Results(object):
         """
 
         if "/number" not in handle:
+            self.comm.barrier()
             self.create_hdf5(handle)
+
+        self.comm.barrier()
 
         # Grab handles
         number_dset = handle["/number"]
@@ -291,12 +306,15 @@ class Results(object):
 
         # Add data
         n_stages = len(self.rates)
-        number_dset[index-1, :, :, :] = self.data
-        for i in range(n_stages):
-            rxn_dset[index-1, i, :, :, :] = self.rates[i].rates
-        eigenvalues_dset[index-1, :] = self.k
-        seeds_dset[index-1, :] = self.seeds
-        time_dset[index-1, :] = self.time
+        for mat in self.mat_to_ind:
+            hdf_ind = self.mat_to_hdf5_ind[mat]
+            ind = self.mat_to_ind[mat]
+            number_dset[index-1, hdf_ind, :, :] = self.data[ind, :, :]
+            for i in range(n_stages):
+                rxn_dset[index-1, i, hdf_ind, :, :] = self.rates[i][mat, :, :]
+            eigenvalues_dset[index-1, :] = self.k
+            seeds_dset[index-1, :] = self.seeds
+            time_dset[index-1, :] = self.time
 
     def from_hdf5(self, handle, index):
         """ Loads results object from HDF5.
@@ -328,18 +346,18 @@ class Results(object):
 
         # Reconstruct dictionaries
         self.volume = OrderedDict()
-        self.cell_to_ind = OrderedDict()
+        self.mat_to_ind = OrderedDict()
         self.nuc_to_ind = OrderedDict()
         rxn_nuc_to_ind = OrderedDict()
         rxn_to_ind = OrderedDict()
 
-        for cell in handle["/cells"]:
-            cell_handle = handle["/cells/" + cell]
-            vol = cell_handle.attrs["volume"]
-            ind = cell_handle.attrs["index"]
+        for mat in handle["/cells"]:
+            mat_handle = handle["/cells/" + mat]
+            vol = mat_handle.attrs["volume"]
+            ind = mat_handle.attrs["index"]
 
-            self.volume[cell] = vol
-            self.cell_to_ind[cell] = ind
+            self.volume[mat] = vol
+            self.mat_to_ind[mat] = ind
 
         for nuc in handle["/nuclides"]:
             nuc_handle = handle["/nuclides/" + nuc]
@@ -356,7 +374,7 @@ class Results(object):
         self.rates = []
         # Reconstruct reactions
         for i in range(n_stages):
-            rate = ReactionRates(self.cell_to_ind, rxn_nuc_to_ind, rxn_to_ind)
+            rate = ReactionRates(self.mat_to_ind, rxn_nuc_to_ind, rxn_to_ind)
 
             rate.rates = handle["/reaction rates"][index, i, :, :, :]
             self.rates.append(rate)
@@ -366,7 +384,7 @@ class Results(object):
 def get_dict(number):
     """ Given an operator nested dictionary, output indexing dictionaries.
 
-    These indexing dictionaries map cell IDs and nuclide names to indices
+    These indexing dictionaries map mat IDs and nuclide names to indices
     inside of Results.data.
 
     Parameters
@@ -377,7 +395,7 @@ def get_dict(number):
     Returns
     -------
     mat_to_ind : OrderedDict of str to int
-        Maps cell strings to index in array.
+        Maps mat strings to index in array.
     nuc_to_ind : OrderedDict of str to int
         Maps nuclide strings to index in array.
     """
@@ -410,9 +428,9 @@ def write_results(result, filename, index):
     """
 
     if index == 1:
-        file = h5py.File(filename + ".h5", "w")
+        file = h5py.File(filename + ".h5", "w", driver='mpio', comm=MPI.COMM_WORLD)
     else:
-        file = h5py.File(filename + ".h5", "a")
+        file = h5py.File(filename + ".h5", "a", driver='mpio', comm=MPI.COMM_WORLD)
 
     result.to_hdf5(file, index)
 

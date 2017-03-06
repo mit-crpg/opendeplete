@@ -49,7 +49,13 @@ class TestIntegrator(unittest.TestCase):
 
         dt = 0.1
 
-        z = integrator.compute_x(coeffs, f, x, dt, 1, print_out=False)
+        class test_operator():
+            def form_matrix(self, rates, i):
+                return rates[i]
+
+        op = test_operator()
+
+        z = integrator.compute_x(op, coeffs, f, x, dt, 1, print_out=False)
 
         # Solution from mathematica
         z0 = np.array((0.951229424500714, 0.818730753077982))
@@ -110,12 +116,12 @@ class TestIntegrator(unittest.TestCase):
         nuc_list = ["na", "nb"]
         burn_list = ["a", "b"]
 
-        op.get_results_info.return_value = vol_list, nuc_list, burn_list
+        op.get_results_info.return_value = vol_list, nuc_list, burn_list, burn_list
 
         results = integrator.compute_results(op, coeffs, x)
 
         # Assert allocated
-        results.allocate.assert_called_once_with(vol_list, nuc_list, burn_list, 4)
+        results.allocate.assert_called_once_with(vol_list, nuc_list, burn_list, burn_list, 4)
 
         # Assert calls
         # Due to how mock handles inputs, assertion of arrays must be through numpy
@@ -136,80 +142,6 @@ class TestIntegrator(unittest.TestCase):
 
             self.assertEqual(a0, t0)
             np.testing.assert_array_almost_equal(a1, t1)
-
-    def test_vec_sum(self):
-        """ Test the summation of lists of vectors """
-
-        # Construct x
-        x11 = [1.0, 1.0]
-        x21 = [0.0, 0.0]
-        x31 = [0.5, 0.7]
-        x41 = [0.0, 0.0]
-        x51 = [1.5, 0.2]
-        x61 = [0.0, 0.0]
-        x71 = [2.5, 0.2]
-
-        x12 = [0.65, 0.1]
-        x22 = [0.0, 0.0]
-        x32 = [0.1, 0.2]
-        x42 = [0.0, 0.0]
-        x52 = [0.2, 1.2]
-        x62 = [0.0, 0.0]
-        x72 = [0.2, 0.2]
-
-        x = []
-
-        x.append([np.array(x11), np.array(x12)])
-        x.append([np.array(x21), np.array(x22)])
-        x.append([np.array(x31), np.array(x32)])
-        x.append([np.array(x41), np.array(x42)])
-        x.append([np.array(x51), np.array(x52)])
-        x.append([np.array(x61), np.array(x62)])
-        x.append([np.array(x71), np.array(x72)])
-
-        vec_sum = integrator.vector_sum(x)
-
-        np.testing.assert_array_almost_equal(vec_sum[0], np.array((5.5, 2.1)))
-        np.testing.assert_array_almost_equal(vec_sum[1], np.array((1.15, 1.7)))
-
-    def test_matexp(self):
-        """ Test the parallel matrix exponent routine."""
-
-        x11 = [1.0, 1.0]
-        x12 = [0.5, 0.7]
-
-        mat11 = [[-1.0, 0.0], [-2.0, -3.0]]
-        mat12 = [[-4.0, -2.0], [-1.5, -3.0]]
-
-        f = [sp.csr_matrix(mat11), sp.csr_matrix(mat12)]
-        x = [np.array(x11), np.array(x12)]
-        dt = 0.1
-
-        z = integrator.matexp(f, x, dt, print_out=False)
-
-        # Solution from mathematica
-        z0 = np.array((0.904837418035960, 0.576799023327476))
-        z1 = np.array((0.241180785179912, 0.472978768578282))
-
-        tol = 1.0e-15
-
-        self.assertLess(np.linalg.norm(z[0] - z0), tol)
-        self.assertLess(np.linalg.norm(z[1] - z1), tol)
-
-    def test_matexp_wrapper(self):
-        """ Test the wrapper for use in mapping. """
-        x = np.array([1.0, 1.0])
-        mat = sp.csr_matrix([[-1.0, 0.0], [-2.0, -3.0]])
-        dt = 0.1
-
-        z = integrator.matexp_wrapper((mat, x, dt))
-
-        # Solution from mathematica
-        z0 = np.array((0.904837418035960, 0.576799023327476))
-
-        tol = 1.0e-15
-
-        self.assertLess(np.linalg.norm(z - z0), tol)
 
     def test_CRAM16(self):
         """ Test 16-term CRAM. """

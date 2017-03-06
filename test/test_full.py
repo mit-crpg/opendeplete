@@ -68,26 +68,26 @@ class TestFull(unittest.TestCase):
         # Load the reference
         res_old = results.read_results("test/test_reference")
 
-        # Assert same cells
-        for cell in res_old[0].cell_to_ind:
-            self.assertIn(cell, res_test[0].cell_to_ind,
-                          msg="Cell " + cell + " not in new results.")
+        # Assert same mats
+        for mat in res_old[0].mat_to_ind:
+            self.assertIn(mat, res_test[0].mat_to_ind,
+                          msg="Cell " + mat + " not in new results.")
         for nuc in res_old[0].nuc_to_ind:
             self.assertIn(nuc, res_test[0].nuc_to_ind,
                           msg="Nuclide " + nuc + " not in new results.")
 
-        for cell in res_test[0].cell_to_ind:
-            self.assertIn(cell, res_old[0].cell_to_ind,
-                          msg="Cell " + cell + " not in old results.")
+        for mat in res_test[0].mat_to_ind:
+            self.assertIn(mat, res_old[0].mat_to_ind,
+                          msg="Cell " + mat + " not in old results.")
         for nuc in res_test[0].nuc_to_ind:
             self.assertIn(nuc, res_old[0].nuc_to_ind,
                           msg="Nuclide " + nuc + " not in old results.")
 
-        for cell in res_test[0].cell_to_ind:
+        for mat in res_test[0].mat_to_ind:
             for nuc in res_test[0].nuc_to_ind:
-                _, y_test = utilities.evaluate_single_nuclide(res_test, 0, cell,
+                _, y_test = utilities.evaluate_single_nuclide(res_test, 0, mat,
                                                               nuc, use_interpolation=False)
-                _, y_old = utilities.evaluate_single_nuclide(res_old, 0, cell,
+                _, y_old = utilities.evaluate_single_nuclide(res_old, 0, mat,
                                                              nuc, use_interpolation=False)
 
                 # Test each point
@@ -104,7 +104,7 @@ class TestFull(unittest.TestCase):
                             correct = False
 
                 self.assertTrue(correct,
-                                msg="Discrepancy in cell " + cell + " and nuc " + nuc
+                                msg="Discrepancy in mat " + mat + " and nuc " + nuc
                                 + "\n" + str(y_old) + "\n" + str(y_test))
 
     def tearDown(self):
