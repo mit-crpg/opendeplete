@@ -196,9 +196,9 @@ class OpenMCOperator(Operator):
 
             if isinstance(cell.fill, openmc.Material):
                 mat = cell.fill
-                for nuclide in mat.nuclides:
-                    nuc_set.add(nuclide[0].name)
-                if mat.burnable:
+                for nuclide in mat.get_nuclide_densities():
+                    nuc_set.add(nuclide)
+                if mat.depletable:
                     mat_burn.add(str(mat.id))
                     volume[str(mat.id)] = mat.volume
                 else:
@@ -206,9 +206,9 @@ class OpenMCOperator(Operator):
                 self.mat_name[mat.id] = name
             else:
                 for mat in cell.fill:
-                    for nuclide in mat.nuclides:
-                        nuc_set.add(nuclide[0].name)
-                    if mat.burnable:
+                    for nuclide in mat.get_nuclide_densities():
+                        nuc_set.add(nuclide)
+                    if mat.depletable:
                         mat_burn.add(str(mat.id))
                         volume[str(mat.id)] = mat.volume
                     else:
@@ -285,9 +285,10 @@ class OpenMCOperator(Operator):
         self.materials[mat_ind].sab = mat._sab
         self.materials[mat_ind].temperature = mat.temperature
 
-        for nuclide in mat.nuclides:
-            name = nuclide[0].name
-            number = nuclide[1] * 1.0e24
+        nuc_dens = mat.get_nuclide_densities()
+        for nuclide in nuc_dens:
+            name = nuclide
+            number = nuc_dens[nuclide][1] * 1.0e24
             self.number.set_atom_density(mat_id, name, number)
 
     def initialize_reaction_rates(self):
