@@ -338,7 +338,7 @@ def generate_problem(n_rings=5, n_wedges=8):
                 if cell_type in sab:
                     omc_mat.add_s_alpha_beta(sab[cell_type])
                 omc_mat.temperature = temperature[cell_type]
-                omc_mat.burnable = burn[cell_type]
+                omc_mat.depletable = burn[cell_type]
                 omc_mat.volume = volume['fuel']
 
                 omc_mats.append(omc_mat)
@@ -350,7 +350,7 @@ def generate_problem(n_rings=5, n_wedges=8):
             if cell.name in sab:
                 omc_mat.add_s_alpha_beta(sab[cell.name])
             omc_mat.temperature = temperature[cell.name]
-            omc_mat.burnable = burn[cell.name]
+            omc_mat.depletable = burn[cell.name]
             omc_mat.volume = volume[cell.name]
 
             cell.fill = omc_mat
