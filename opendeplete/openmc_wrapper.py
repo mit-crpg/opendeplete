@@ -285,9 +285,9 @@ class OpenMCOperator(Operator):
         self.materials[mat_ind].sab = mat._sab
         self.materials[mat_ind].temperature = mat.temperature
 
-        nuc_dens = mat.get_nuclide_densities()
+        nuc_dens = mat.get_nuclide_atom_densities()
         for nuclide in nuc_dens:
-            name = nuclide
+            name = nuclide.name
             number = nuc_dens[nuclide][1] * 1.0e24
             self.number.set_atom_density(mat_id, name, number)
 
