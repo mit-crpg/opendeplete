@@ -12,8 +12,7 @@ import re
 import os
 import sys
 
-import h5py
-import numpy as np
+from tqdm import tqdm
 import scipy.sparse as sp
 import openmc.data
 # Try to use lxml if it is available. It preserves the order of attributes and
@@ -29,6 +28,9 @@ except ImportError:
 
 from .nuclide import Nuclide
 
+
+# tuple of (reaction name, possible MT values, (dA, dZ)) where dA is the change
+# in the mass number and dZ is the change in the atomic number
 _REACTIONS = [
     ('(n,2n)', set(chain([16], range(875, 892))), (-1, 0)),
     ('(n,3n)', {17}, (-2, 0)),
@@ -40,6 +42,7 @@ _REACTIONS = [
 
 
 def _get_zai(s):
+    """Get ZAI value (10000*z + 10*A + metastable state) for sorting purposes"""
     symbol, A, state = re.match(r'([A-Zn][a-z]*)(\d+)((?:_[em]\d+)?)', s).groups()
     Z = openmc.data.ATOMIC_NUMBER[symbol]
     A = int(A)
@@ -129,7 +132,7 @@ class DepletionChain(object):
     def __init__(self):
         self.nuclides = []
         self.nuclide_dict = OrderedDict()
-        self.nuc_to_react_int = OrderedDict()
+        self.nuc_to_react_ind = OrderedDict()
         self.react_to_ind = OrderedDict()
 
     @property
@@ -146,21 +149,18 @@ class DepletionChain(object):
         decay_files : list of str
             List of ENDF decay sub-library files
         fpy_files : list of str
-            List of ENDF fission product yield sub-library files
+            List of ENDF neutron-induced fission product yield sub-library files
         neutron_files : list of str
-            List of ENDF neutron sub-library files
+            List of ENDF neutron reaction sub-library files
 
         """
         depl_chain = cls()
 
         # Create dictionary mapping target to filename
-        print('Processing incident neutron file: ', end='')
         reactions = {}
-        for i, f in enumerate(neutron_files):
-            status = '{:36}[{:^8.2%}]'.format(os.path.basename(f),
-                                              i / len(neutron_files))
-            print(status + chr(8)*len(status), end='')
-            sys.stdout.flush()
+        pbar = tqdm(neutron_files)
+        for f in pbar:
+            pbar.set_description('Processing {}'.format(os.path.basename(f)))
             evaluation = openmc.data.endf.Evaluation(f)
             name = evaluation.gnd_name
             reactions[name] = {}
@@ -170,32 +170,21 @@ class DepletionChain(object):
                     openmc.data.endf.get_head_record(file_obj)
                     q_value = openmc.data.endf.get_cont_record(file_obj)[1]
                     reactions[name][mt] = q_value
-        print(' '*36 + '[  DONE  ]')
 
         # Determine what decay and FPY nuclides are available
         decay_data = {}
-        print('Processing decay file: ', end='')
-        for i, f in enumerate(decay_files):
-            status = '{:47}[{:^8.2%}]'.format(
-                os.path.basename(f), i / len(decay_files))
-            print(status + chr(8)*len(status), end='')
-            sys.stdout.flush()
-
+        pbar = tqdm(decay_files)
+        for f in pbar:
+            pbar.set_description('Processing {}'.format(os.path.basename(f)))
             data = openmc.data.Decay(f)
             decay_data[data.nuclide['name']] = data
-        print(' '*47 + '[  DONE  ]')
 
         fpy_data = {}
-        print('Processing yields file: ', end='')
-        for i, f in enumerate(fpy_files):
-            status = '{:46}[{:^8.2%}]'.format(
-                os.path.basename(f), i / len(fpy_files))
-            print(status + chr(8)*len(status), end='')
-            sys.stdout.flush()
-
+        pbar = tqdm(fpy_files)
+        for f in pbar:
+            pbar.set_description('Processing {}'.format(os.path.basename(f)))
             data = openmc.data.FissionProductYields(f)
             fpy_data[data.nuclide['name']] = data
-        print(' '*46 + '[  DONE  ]')
 
         print('Creating depletion_chain...')
         missing_daughter = []
@@ -252,8 +241,7 @@ class DepletionChain(object):
                         nuclide.reaction_type.append(name)
                         nuclide.reaction_target.append(daughter)
                         if daughter not in decay_data:
-                            missing_rx_product.append('{} {} {}'.format(
-                                parent, name, daughter))
+                            missing_rx_product.append((parent, name, daughter))
 
                         # Store Q value
                         for mt in sorted(mts):
@@ -458,6 +446,9 @@ class DepletionChain(object):
                             if path_rate != 0.0:
                                 matrix[k, i] += path_rate
                         else:
+                            # Assume that we should always use thermal fission
+                            # yields. At some point it would be nice to account
+                            # for the energy-dependence..
                             energy, data = sorted(nuc.yield_data.items())[0]
                             for product, y in data:
                                 k = self.nuclide_dict[product]

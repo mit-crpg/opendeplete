@@ -29,6 +29,8 @@ class TestDepletionChain(unittest.TestCase):
         self.assertEqual(dep.n_nuclides, 3)
 
     def test_from_endf(self):
+        """Test depletion chain building from ENDF. Empty at the moment until we figure
+        out a good way to unit-test this."""
         pass
 
     def test_xml_read(self):
