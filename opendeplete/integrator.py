@@ -7,6 +7,7 @@ eventually more.
 
 import concurrent.futures
 import copy
+from itertools import repeat
 import os
 import time
 
@@ -341,16 +342,9 @@ def matexp(mat, vec, dt, print_out=True):
 
     t1 = time.time()
 
-    def data_iterator(start, end):
-        """ Simple iterator over matrices and vectors."""
-        i = start
-
-        while i < end:
-            yield (mat[i], vec[i], dt)
-            i += 1
-
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        vec2 = executor.map(matexp_wrapper, data_iterator(0, len(mat)))
+        vec2 = executor.map(matexp_wrapper,
+                            zip(mat, vec, repeat(dt, len(mat))))
     t2 = time.time()
 
     if print_out:

@@ -7,6 +7,7 @@ import copy
 from collections import OrderedDict
 import concurrent.futures
 import os
+from itertools import repeat
 import random
 from subprocess import call
 import sys
@@ -163,8 +164,7 @@ class OpenMCOperator(Operator):
         self.burn_nuc_to_ind = None
 
         # Read depletion chain
-        self.chain = DepletionChain()
-        self.chain.xml_read(settings.chain_file)
+        self.chain = DepletionChain.xml_read(settings.chain_file)
 
         # Clear out OpenMC
         clean_up_openmc()
@@ -261,8 +261,7 @@ class OpenMCOperator(Operator):
 
         # Now extract the number densities and store
         cells = self.geometry.get_all_material_cells()
-        for cell_id in cells:
-            cell = cells[cell_id]
+        for cell in cells.values():
             if isinstance(cell.fill, openmc.Material):
                 self.set_number_from_mat(cell.fill)
             else:
@@ -336,7 +335,7 @@ class OpenMCOperator(Operator):
         call(self.settings.openmc_call)
         time_openmc = time.time()
 
-        statepoint_name = "statepoint." + str(self.settings.batches) + ".h5"
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name)
@@ -440,9 +439,13 @@ class OpenMCOperator(Operator):
         settings_file.particles = particles
         settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
                                                        self.settings.upper_right))
-        settings_file.entropy_lower_left = self.settings.lower_left
-        settings_file.entropy_upper_right = self.settings.upper_right
-        settings_file.entropy_dimension = self.settings.entropy_dimension
+
+        if self.settings.entropy_dimension is not None:
+            entropy_mesh = openmc.Mesh()
+            entropy_mesh.lower_left = self.settings.lower_left
+            entropy_mesh.upper_right = self.settings.upper_right
+            entropy_mesh.dimension = self.settings.entropy_dimension
+            settings_file.entropy_mesh = entropy_mesh
 
         # Set seed
         if self.settings.constant_seed is not None:
@@ -450,8 +453,7 @@ class OpenMCOperator(Operator):
         else:
             seed = random.randint(1, sys.maxsize-1)
 
-        self.seed = seed
-        settings_file.seed = seed
+        settings_file.seed = self.seed = seed
 
         settings_file.export_to_xml()
 
@@ -462,8 +464,6 @@ class OpenMCOperator(Operator):
         currently in the problem, this function automatically generates a
         tally.xml for the simulation.
         """
-        chain = self.chain
-
         # ----------------------------------------------------------------------
         # Create tallies for depleting regions
         tally_ind = 1
@@ -484,10 +484,10 @@ class OpenMCOperator(Operator):
         # cell, make a tally
         tally_dep = openmc.Tally(tally_id=tally_ind)
         for key in nuc_superset:
-            if key in chain.nuclide_dict:
+            if key in self.chain.nuclide_dict:
                 tally_dep.nuclides.append(key)
 
-        for reaction in chain.react_to_ind:
+        for reaction in self.chain.react_to_ind:
             tally_dep.scores.append(reaction)
 
         tallies_file.append(tally_dep)
@@ -514,16 +514,9 @@ class OpenMCOperator(Operator):
 
         n_mat = len(self.burn_mat_to_ind)
 
-        def data_iterator(start, end):
-            """ Simple iterator over chain / reaction rates"""
-            i = start
-
-            while i < end:
-                yield (self.chain, self.reaction_rates[i, :, :])
-                i += 1
-
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(matrix_wrapper, data_iterator(0, n_mat))
+            matrices = executor.map(matrix_wrapper, zip(
+                repeat(self.chain, n_mat), self.reaction_rates.rates))
 
         return list(matrices)
 
@@ -611,7 +604,9 @@ class OpenMCOperator(Operator):
             if nuclide.name in self.reaction_rates.nuc_to_ind:
                 ind = self.reaction_rates.nuc_to_ind[nuclide.name]
 
-                power_vec[ind] = nuclide.fission_power
+                if 'fission' in nuclide.reaction_type:
+                    j = nuclide.reaction_type.index('fission')
+                    power_vec[ind] = nuclide.reaction_Q[j]*1e-6
 
         # Extract results
         for i, mat in enumerate(self.number.burn_mat_list):
@@ -619,15 +614,14 @@ class OpenMCOperator(Operator):
             results = file["tallies/tally 1/results"][i, :, 0]
 
             results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
-            number = np.zeros((self.reaction_rates.n_nuc))
+            number = np.zeros(self.reaction_rates.n_nuc)
 
             # Expand into our memory layout
             j = 0
-            for i_nuc_array, i_nuc_results in enumerate(nuc_ind):
-                nuc = nuclides[i_nuc_array]
+            for nuc, i_nuc_results in zip(nuclides, nuc_ind):
+                number[i_nuc_results] = self.number[mat, nuc]
                 for react in react_ind:
                     results_expanded[i_nuc_results, react] = results[j]
-                    number[i_nuc_results] = self.number[mat, nuc]
                     j += 1
 
             # Add power

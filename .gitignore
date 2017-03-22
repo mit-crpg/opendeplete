@@ -64,3 +64,9 @@ target/
 
 # Emacs temporaries
 *~
+
+# ENDF zips and files
+ENDF-B-VII.1-*.zip
+scripts/neutrons/
+scripts/decay/
+scripts/nfy/
