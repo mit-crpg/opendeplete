@@ -10,7 +10,6 @@ from itertools import chain
 import math
 import re
 import os
-import sys
 
 from tqdm import tqdm
 import scipy.sparse as sp
@@ -158,33 +157,33 @@ class DepletionChain(object):
 
         # Create dictionary mapping target to filename
         reactions = {}
-        pbar = tqdm(neutron_files)
-        for f in pbar:
-            pbar.set_description('Processing {}'.format(os.path.basename(f)))
-            evaluation = openmc.data.endf.Evaluation(f)
-            name = evaluation.gnd_name
-            reactions[name] = {}
-            for mf, mt, nc, mod in evaluation.reaction_list:
-                if mf == 3:
-                    file_obj = StringIO(evaluation.section[3, mt])
-                    openmc.data.endf.get_head_record(file_obj)
-                    q_value = openmc.data.endf.get_cont_record(file_obj)[1]
-                    reactions[name][mt] = q_value
+        with tqdm(neutron_files) as pbar:
+            for f in pbar:
+                pbar.set_description('Processing {}'.format(os.path.basename(f)))
+                evaluation = openmc.data.endf.Evaluation(f)
+                name = evaluation.gnd_name
+                reactions[name] = {}
+                for mf, mt, nc, mod in evaluation.reaction_list:
+                    if mf == 3:
+                        file_obj = StringIO(evaluation.section[3, mt])
+                        openmc.data.endf.get_head_record(file_obj)
+                        q_value = openmc.data.endf.get_cont_record(file_obj)[1]
+                        reactions[name][mt] = q_value
 
         # Determine what decay and FPY nuclides are available
         decay_data = {}
-        pbar = tqdm(decay_files)
-        for f in pbar:
-            pbar.set_description('Processing {}'.format(os.path.basename(f)))
-            data = openmc.data.Decay(f)
-            decay_data[data.nuclide['name']] = data
+        with tqdm(decay_files) as pbar:
+            for f in pbar:
+                pbar.set_description('Processing {}'.format(os.path.basename(f)))
+                data = openmc.data.Decay(f)
+                decay_data[data.nuclide['name']] = data
 
         fpy_data = {}
-        pbar = tqdm(fpy_files)
-        for f in pbar:
-            pbar.set_description('Processing {}'.format(os.path.basename(f)))
-            data = openmc.data.FissionProductYields(f)
-            fpy_data[data.nuclide['name']] = data
+        with tqdm(fpy_files) as pbar:
+            for f in pbar:
+                pbar.set_description('Processing {}'.format(os.path.basename(f)))
+                data = openmc.data.FissionProductYields(f)
+                fpy_data[data.nuclide['name']] = data
 
         print('Creating depletion_chain...')
         missing_daughter = []
