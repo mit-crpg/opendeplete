@@ -182,8 +182,7 @@ class OpenMCOperator(Operator):
         self.burn_nuc_to_ind = None
 
         # Read depletion chain
-        self.chain = DepletionChain()
-        self.chain.xml_read(settings.chain_file)
+        self.chain = DepletionChain.xml_read(settings.chain_file)
 
         # Clear out OpenMC, create task lists, distribute
         if self.rank == 0:
@@ -253,9 +252,9 @@ class OpenMCOperator(Operator):
 
             if isinstance(cell.fill, openmc.Material):
                 mat = cell.fill
-                for nuclide in mat.nuclides:
-                    nuc_set.add(nuclide[0].name)
-                if mat.burnable:
+                for nuclide in mat.get_nuclide_densities():
+                    nuc_set.add(nuclide)
+                if mat.depletable:
                     mat_burn.add(str(mat.id))
                     volume[str(mat.id)] = mat.volume
                 else:
@@ -263,9 +262,9 @@ class OpenMCOperator(Operator):
                 self.mat_name[mat.id] = name
             else:
                 for mat in cell.fill:
-                    for nuclide in mat.nuclides:
-                        nuc_set.add(nuclide[0].name)
-                    if mat.burnable:
+                    for nuclide in mat.get_nuclide_densities():
+                        nuc_set.add(nuclide)
+                    if mat.depletable:
                         mat_burn.add(str(mat.id))
                         volume[str(mat.id)] = mat.volume
                     else:
@@ -366,8 +365,7 @@ class OpenMCOperator(Operator):
 
         # Now extract the number densities and store
         cells = self.geometry.get_all_material_cells()
-        for cell_id in cells:
-            cell = cells[cell_id]
+        for cell in cells.values():
             if isinstance(cell.fill, openmc.Material):
                 if str(cell.fill.id) in mat_dict:
                     self.set_number_from_mat(cell.fill)
@@ -392,9 +390,10 @@ class OpenMCOperator(Operator):
         self.materials[mat_ind].sab = mat._sab
         self.materials[mat_ind].temperature = mat.temperature
 
-        for nuclide in mat.nuclides:
-            name = nuclide[0].name
-            number = nuclide[1] * 1.0e24
+        nuc_dens = mat.get_nuclide_atom_densities()
+        for nuclide in nuc_dens:
+            name = nuclide.name
+            number = nuc_dens[nuclide][1] * 1.0e24
             self.number.set_atom_density(mat_id, name, number)
 
     def initialize_reaction_rates(self):
@@ -453,7 +452,7 @@ class OpenMCOperator(Operator):
             while not status.Test():
                 time.sleep(1)
 
-        statepoint_name = "statepoint." + str(self.settings.batches) + ".h5"
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name)
@@ -529,6 +528,7 @@ class OpenMCOperator(Operator):
                 if nuc in self.participating_nuclides:
                     val = 1.0e-24*self.number.get_atom_density(mat, nuc)
 
+                    # If nuclide is zero, do not add to the problem.
                     if val > 0.0:
                         if self.settings.round_number:
                             val_magnitude = np.floor(np.log10(val))
@@ -605,9 +605,13 @@ class OpenMCOperator(Operator):
             settings_file.particles = particles
             settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
                                                            self.settings.upper_right))
-            settings_file.entropy_lower_left = self.settings.lower_left
-            settings_file.entropy_upper_right = self.settings.upper_right
-            settings_file.entropy_dimension = self.settings.entropy_dimension
+
+            if self.settings.entropy_dimension is not None:
+                entropy_mesh = openmc.Mesh()
+                entropy_mesh.lower_left = self.settings.lower_left
+                entropy_mesh.upper_right = self.settings.upper_right
+                entropy_mesh.dimension = self.settings.entropy_dimension
+                settings_file.entropy_mesh = entropy_mesh
 
             # Set seed
             if self.settings.constant_seed is not None:
@@ -615,8 +619,7 @@ class OpenMCOperator(Operator):
             else:
                 seed = random.randint(1, sys.maxsize-1)
 
-            self.seed = seed
-            settings_file.seed = seed
+            settings_file.seed = self.seed = seed
 
             settings_file.export_to_xml()
 
@@ -761,7 +764,9 @@ class OpenMCOperator(Operator):
             if nuclide.name in self.reaction_rates.nuc_to_ind:
                 ind = self.reaction_rates.nuc_to_ind[nuclide.name]
 
-                power_vec[ind] = nuclide.fission_power
+                if 'fission' in nuclide.reaction_type:
+                    j = nuclide.reaction_type.index('fission')
+                    power_vec[ind] = nuclide.reaction_Q[j]*1e-6
 
         # Extract results
         for i, mat in enumerate(self.number.burn_mat_list):
@@ -772,15 +777,14 @@ class OpenMCOperator(Operator):
             results = file["tallies/tally 1/results"][slab, :, 0]
 
             results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
-            number = np.zeros((self.reaction_rates.n_nuc))
+            number = np.zeros(self.reaction_rates.n_nuc)
 
             # Expand into our memory layout
             j = 0
-            for i_nuc_array, i_nuc_results in enumerate(nuc_ind):
-                nuc = nuclides[i_nuc_array]
+            for nuc, i_nuc_results in zip(nuclides, nuc_ind):
+                number[i_nuc_results] = self.number[mat, nuc]
                 for react in react_ind:
                     results_expanded[i_nuc_results, react] = results[j]
-                    number[i_nuc_results] = self.number[mat, nuc]
                     j += 1
 
             # Add power
@@ -794,8 +798,7 @@ class OpenMCOperator(Operator):
 
             self.reaction_rates.rates[i, :, :] = results_expanded
 
-        # Communicate xml_string to rank=0, which will stream to disk.
-        # This means only 2 xml strings will exist on any node.
+        # Communicate power between nodes
         if self.rank == 0:
             power_array = np.zeros(self.size)
             power_array[0] = power

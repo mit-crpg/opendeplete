@@ -29,6 +29,7 @@ kwargs = {'name': 'opendeplete',
 
 if have_setuptools:
     # Required dependencies
-    kwargs['install_requires'] = ['numpy', 'scipy', 'openmc']
+    kwargs['install_requires'] = ['numpy', 'scipy', 'h5py', 'tqdm',
+                                  'requests', 'openmc']
 
 setup(**kwargs)
