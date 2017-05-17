@@ -7,7 +7,6 @@ import copy
 from collections import OrderedDict
 import os
 import random
-from subprocess import call
 import sys
 import time
 try:
@@ -45,10 +44,11 @@ class OpenMCSettings(Settings):
     chain_file : str
         Path to the depletion chain xml file.  Defaults to the environment
         variable "OPENDEPLETE_CHAIN" if it exists.
-    openmc_call : list of str
-        The command to be used with subprocess.call to run a simulation. If no
-        arguments are to be passed, a string suffices.  To run with mpiexec,
-        a list of strings is needed.
+    openmc_call : str
+        OpenMC executable path.  Defaults to "openmc".
+    openmc_npernode : int
+        Number of openmc MPI ranks per node.  OpenMP will be used to fill the
+        rest of the node.  Defaults to 1 for memory reasons.
     particles : int
         Number of particles to simulate per batch.
     batches : int
@@ -77,7 +77,8 @@ class OpenMCSettings(Settings):
             self.chain_file = os.environ["OPENDEPLETE_CHAIN"]
         except KeyError:
             self.chain_file = None
-        self.openmc_call = None
+        self.openmc_call = "openmc"
+        self.openmc_npernode = 1
         self.particles = None
         self.batches = None
         self.inactive = None
@@ -158,6 +159,12 @@ class OpenMCOperator(Operator):
         MPI rank of this object.
     size : int
         The number of MPI threads.
+    nodes : int
+        An approximate quantity of nodes.
+    npernode : int
+        An approximate quantity of processes per node.  If the architecture is
+        heterogeneous, takes the smallest number of processes per node.  This 
+        assumes that OpenDeplete is running on all nodes.
     mat_tally_ind : OrderedDict of str to int
         Dictionary mapping material ID to index in tally.
     """
@@ -169,6 +176,37 @@ class OpenMCOperator(Operator):
 
         self.rank = self.comm.rank
         self.size = self.comm.size
+
+        self.nodes = 0
+        self.npernode = 0
+
+        # Compute number of nodes and size of each node.
+        subcomm = self.comm.Split_type(MPI.COMM_TYPE_SHARED)
+        if self.rank == 0:
+            sub_rank = np.zeros(self.size, np.int32)
+            for i in range(1, self.size):
+                sub_rank[i] = self.comm.recv(source=i, tag=0)
+
+            # Compute the quantity of each rank
+            quantity = np.zeros(np.max(sub_rank) + 1, np.int32)
+            for i in range(self.size):
+                quantity[sub_rank[i]] += 1
+
+            # Starting from the bottom, compute the largest "block"
+            j = 1
+            for i in range(1, len(quantity)):
+                if quantity[i-1] != quantity[i]:
+                    break
+                else:
+                    j = i + 1
+            self.nodes = quantity[j-1]
+            self.npernode = j
+        else:
+            self.comm.send(subcomm.rank, dest=0, tag=0)
+
+        self.nodes = self.comm.bcast(self.nodes, root=0)
+        self.npernode = self.comm.bcast(self.npernode, root=0)
+        self.comm.barrier()
 
         self.geometry = geometry
         self.materials = []
@@ -427,6 +465,14 @@ class OpenMCOperator(Operator):
             Seed for this simulation.
         """
 
+        # Ensure the nonexistance of tallies.out
+        tally_name = "tallies.out"
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
+        try:
+            os.remove(tally_name)
+        except OSError:
+            pass
+
         # Update status
         self.set_density(vec)
 
@@ -435,24 +481,30 @@ class OpenMCOperator(Operator):
         self.generate_tally_xml()
         self.generate_settings_xml()
 
+        time_start = time.time()
+
         if self.rank == 0:
-            time_start = time.time()
+            # Unfortunately, this is API dependent.
+            # This is for OpenMPI because the options are documented.
+            subinfo = MPI.Info.Create()
+            subinfo.Set("npernode", str(self.settings.openmc_npernode))
+            subinfo.Set("bind_to", "none")
+            threads_omp = int(np.floor(self.npernode / self.settings.openmc_npernode))
+            subinfo.Set("env", "OMP_NUM_THREADS=" + str(threads_omp))
 
             # Run model
-            call(self.settings.openmc_call)
-            time_openmc = time.time()
+            threads = self.settings.openmc_npernode * self.nodes
+            MPI.COMM_SELF.Spawn(self.settings.openmc_call,
+                                info=subinfo, maxprocs=threads)
 
-            for i in range(1, self.size):
-                self.comm.send(True, dest=i, tag=0)
+            subinfo.Free()
 
-        # We don't want to use a barrier here, as that will slow down OpenMC
-        # due to spinlocking. Instead, we'll do async send-receives
-        if self.rank != 0:
-            status = self.comm.irecv(source=0, tag=0)
-            while not status.Test():
-                time.sleep(1)
+        # Check if tally file has been created, if not, sleep.
+        # If OpenMC crashes, MPI will successfully handle it.
+        while not os.path.isfile(tally_name):
+            time.sleep(1)
 
-        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
+        time_openmc = time.time()
 
         # Extract results
         k = self.unpack_tallies_and_normalize(statepoint_name)
