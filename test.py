@@ -21,7 +21,6 @@ suite_normal = [
     "test.test_atom_number",
     "test.test_depletion_chain",
     "test.test_integrator",
-    "test.test_integrator_coeffs",
     "test.test_integrator_regression",
     "test.test_nuclide",
     "test.test_reaction_rates"

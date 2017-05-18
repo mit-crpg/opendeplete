@@ -16,296 +16,226 @@ import scipy.sparse.linalg as sla
 
 from .results import Results, write_results
 
-def integrate(operator, coeffs, print_out=True):
-    """ Performs integration of an operator using the method in coeffs.
-
-    This is a general exponential-linear type integrator for depletion.
-    It supports adaptive timestepping, first-same-as-last, and interpolation.
+def predictor(operator, print_out=True):
+    """ Performs integration of an operator using basic Predictor method.
 
     Parameters
     ----------
     operator : Operator
         The operator object to simulate on.
-    coeffs : Integrator
-        Coefficients to use to integrate with.
     print_out : bool, optional
         Whether or not to print out time.
     """
-
-    # Extract MPI comm if present inside of operator
-    comm = getattr(operator, "comm", MPI.COMM_WORLD)
 
     # Save current directory
     dir_home = os.getcwd()
 
     # Move to folder
     os.makedirs(operator.settings.output_dir, exist_ok=True)
-
-    # Change directory
     os.chdir(operator.settings.output_dir)
 
     # Generate initial conditions
     vec = operator.initial_condition()
 
-    # Initial configuration
-    current_time = 0.0
-    end_time = np.sum(operator.settings.dt_vec)
-    step_ind = 1
+    n_mats = len(vec)
 
-    # Compute initial time step and what stage we should pause on to check
-    # errors before interpolation
-    if operator.settings.tol is not None and coeffs.ats:
-        dt = 3600 # 1 hour
-        int_step = coeffs.ats_ind
-        ats_mode = True
-        tol = operator.settings.tol
-    else:
-        dt = operator.settings.dt_vec[0]
-        int_step = coeffs.final_ind
-        ats_mode = False
+    t = 0.0
 
-    # Storage for fsal capabilities
-    rates_last = []
-    eigvl_last = 0
-    seed_last = 0
-
-    while current_time < end_time:
+    for i, dt in enumerate(operator.settings.dt_vec):
         # Create vectors
         x = [copy.copy(vec)]
         seeds = []
         eigvls = []
         rates_array = []
 
-        # Ensure timestep does not fall off edge
-        if current_time + dt > end_time:
-            dt = end_time - current_time
-            # Ensure termination in case of roundoff
-            if dt < 1.0e-12 * end_time:
-                break
+        eigvl, rates, seed = operator.eval(x[0])
 
-        # For each component vector
-        for s in range(int_step):
-            # Compute f as needed
-            if step_ind == 1 or not coeffs.fsal or s > 0:
-                eigvl, rates, seed = operator.eval(x[s])
-            else:
-                # Use stored FSAL data
-                eigvl = eigvl_last
-                rates = rates_last
-                seed = seed_last
+        eigvls.append(eigvl)
+        seeds.append(seed)
+        rates_array.append(rates)
 
-            # Store values
-            eigvls.append(eigvl)
-            seeds.append(seed)
-            rates_array.append(rates)
+        # Create results, write to disk
+        save_results(operator, x, rates_array, eigvls, seeds, [t, t + dt], i)
 
-            # Compute next x
-            x_next = compute_x(operator, coeffs, rates_array, x, dt, s, print_out)
-            x.append(x_next)
+        x_result = []
 
-        # Compute error if needed
-        if ats_mode:
-            relerr = compute_max_relerr(x[coeffs.final_ind], x[coeffs.ats_ind])
+        t_start = time.time()
+        for mat in range(n_mats):
+            # Form matrix
+            f = operator.form_matrix(rates_array[0], mat)
 
-            # Communicate relative error to everyone
-            if comm.rank == 0:
-                relerr_vec = np.zeros(comm.size)
-                relerr_vec[0] = relerr
-                for i in range(1, comm.size):
-                    relerr_vec[i] = comm.recv(source=i, tag=i)
-                relerr = np.max(relerr_vec)
-            else:
-                comm.send(relerr, dest=0, tag=comm.rank)
+            x_new = CRAM48(f, x[0][mat], dt)
 
-            relerr = comm.bcast(relerr, root=0)
+            x_result.append(x_new)
+        t_end = time.time()
+        if MPI.COMM_WORLD.rank == 0:
+            if print_out:
+                print("Time to matexp: ", t_end - t_start)
 
-            if relerr > tol:
-                # Compute new timestep
-                dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
-                continue
+        t += dt
+        vec = copy.deepcopy(x_result)
 
-        # Compute rest of stages (for interpolation)
-        for s in range(int_step, coeffs.stages):
-            # Compute f
-            eigvl, rates, seed = operator.eval(x[s])
+    # Perform one last simulation
+    x = [copy.copy(vec)]
+    seeds = []
+    eigvls = []
+    rates_array = []
+    eigvl, rates, seed = operator.eval(x[0])
 
-            # Store values
-            eigvls.append(eigvl)
-            seeds.append(seed)
-            rates_array.append(rates)
+    eigvls.append(eigvl)
+    seeds.append(seed)
+    rates_array.append(rates)
 
-            # Compute next x
-            x_next = compute_x(operator, coeffs, rates_array, x, dt, s, print_out)
-            x.append(x_next)
-
-        # Compute interpolating polynomials, fill in results
-        results = compute_results(operator, coeffs, x)
-
-        results.final_stage = coeffs.final_ind
-        results.k = eigvls
-        results.seeds = seeds
-        results.time = [current_time, current_time + dt]
-        results.rates = rates_array
-
-        write_results(results, "results", step_ind)
-
-        # Compute next time step and store values if FSAL
-        current_time += dt
-        step_ind += 1
-        vec = copy.deepcopy(x[coeffs.final_ind])
-
-        if ats_mode:
-            dt = 0.9 * dt * (tol / relerr)**(1 / coeffs.order)
-
-        if coeffs.fsal:
-            eigvl_last = copy.deepcopy(eigvls[coeffs.final_ind])
-            rates_last = copy.deepcopy(rates_array[coeffs.final_ind])
-            seed_last = copy.deepcopy(seeds[coeffs.final_ind])
+    # Create results, write to disk
+    save_results(operator, x, rates_array, eigvls, seeds, [t, t],
+                 len(operator.settings.dt_vec))
 
     # Return to origin
     os.chdir(dir_home)
 
-def compute_x(operator, coeffs, rates_array, x, dt, stage, print_out=True):
-    r""" Compute sub-vectors x for exponential-linear
-
-    This function computes x using the following equation
-    .. math:
-        x_s = \sum_{i=1}^s d_{si} e^{h \sum_{j=1}^s a_{sij} F(x_j)} x_i
+def cecm(operator, print_out=True):
+    """ Performs integration of an operator using the CECM pc algorithm.
 
     Parameters
     ----------
-    operator : function
-        Provides F(x_j) construction from rates_array via form_matrix
-    coeffs : Integrator
-        Coefficients to use in this calculation.
-    rates_array : numpy.ndarray-like
-        rates_array[j] contains input to form_matrix to create F(x_j)
-    x : list of list of numpy.array
-        The prior x vectors.  Indexed [i][mat] using the above equation.
-    dt : Float
-        The current timestep.
-    stage : Int
-        Index s in the above equation
+    operator : Operator
+        The operator object to simulate on.
     print_out : bool, optional
         Whether or not to print out time.
-
-    Returns
-    -------
-    list of numpy.array
-        The next x component for each mat.
     """
 
-    comm = getattr(operator, "comm", MPI.COMM_WORLD)
+    # Save current directory
+    dir_home = os.getcwd()
 
-    if comm.rank == 0:
-        t1 = time.time()
+    # Move to folder
+    os.makedirs(operator.settings.output_dir, exist_ok=True)
+    os.chdir(operator.settings.output_dir)
 
-    x_result = []
+    # Generate initial conditions
+    vec = operator.initial_condition()
 
-    mats = len(x[0])
+    n_mats = len(vec)
 
-    for mat in range(mats):
-        # Construct F(x_j) here to save RAM
-        f = []
-        for j in range(stage + 1):
-            f.append(operator.form_matrix(rates_array[j], mat))
+    t = 0.0
 
-        x_mat = np.zeros(x[0][0].shape)
+    for i, dt in enumerate(operator.settings.dt_vec):
+        # Create vectors
+        x = [copy.copy(vec)]
+        seeds = []
+        eigvls = []
+        rates_array = []
 
-        for i in range(stage + 1):
-            # Compose inner sum
-            f_sum = coeffs.a[stage, i, 0] * f[0]
-            for j in range(1, stage + 1):
-                f_sum += coeffs.a[stage, i, j] * f[j]
+        eigvl, rates, seed = operator.eval(x[0])
 
-            # compute matexp
-            matrix_exponent = CRAM48(f_sum, x[i][mat], dt)
+        eigvls.append(eigvl)
+        seeds.append(seed)
+        rates_array.append(rates)
 
-            x_mat += coeffs.d[stage, i] * matrix_exponent
+        x_result = []
 
-        x_result.append(x_mat)
+        t_start = time.time()
+        for mat in range(n_mats):
+            # Form matrix
+            f = operator.form_matrix(rates_array[0], mat)
 
-    if comm.rank == 0 and print_out:
-        t2 = time.time()
-        print("Time to next_x: ", t2 - t1)
+            x_new = CRAM48(f, x[0][mat], dt/2)
 
-    return x_result
+            x_result.append(x_new)
 
-def compute_max_relerr(v1, v2):
-    """ Compute the maximum relative error between v1 and v2.
+        t_end = time.time()
+        if MPI.COMM_WORLD.rank == 0:
+            if print_out:
+                print("Time to matexp: ", t_end - t_start)
 
-    relerr = abs((v1 - v2)/v1)
+        x.append(x_result)
 
-    Parameters
-    ----------
-    v1 : list of numpy.array
-        Vector 1 for each cell.
-    v2 : list of numpy.array
-        Vector 2 for each cell.
+        eigvl, rates, seed = operator.eval(x[1])
 
-    Returns
-    -------
-    relerr : Float
-        Relative error.
-    """
+        eigvls.append(eigvl)
+        seeds.append(seed)
+        rates_array.append(rates)
 
-    relerr = 0.0
+        x_result = []
 
-    cells = len(v1)
+        t_start = time.time()
+        for mat in range(n_mats):
+            # Form matrix
+            f = operator.form_matrix(rates_array[1], mat)
 
-    for i in range(cells):
-        relerr_cell = max(np.abs((v1[i] - v2[i]) / v1[i]))
-        if relerr_cell > relerr:
-            relerr = relerr_cell
-    return relerr
+            x_new = CRAM48(f, x[0][mat], dt)
 
-def compute_results(op, coeffs, x):
-    r""" Computes polynomial coefficients and stores into a results type
+            x_result.append(x_new)
 
-    Computes the polynomial coefficients given by
-    .. math:
-        c_i = \sum_{j=1}^n p_{ij} x_{j}
-    where n is the number of components of x
+        t_end = time.time()
+        if MPI.COMM_WORLD.rank == 0:
+            if print_out:
+                print("Time to matexp: ", t_end - t_start)
+
+        # Create results, write to disk
+        save_results(operator, x, rates_array, eigvls, seeds, [t, t + dt], i)
+
+        t += dt
+        vec = copy.deepcopy(x_result)
+
+    # Perform one last simulation
+    x = [copy.copy(vec)]
+    seeds = []
+    eigvls = []
+    rates_array = []
+    eigvl, rates, seed = operator.eval(x[0])
+
+    eigvls.append(eigvl)
+    seeds.append(seed)
+    rates_array.append(rates)
+
+    # Create results, write to disk
+    save_results(operator, x, rates_array, eigvls, seeds, [t, t],
+                 len(operator.settings.dt_vec))
+
+    # Return to origin
+    os.chdir(dir_home)
+
+def save_results(op, x, rates, eigvls, seeds, t, step_ind):
+    """ Creates and writes results to disk
 
     Parameters
     ----------
     op : Function
         The operator used to generate these results.
-    coeffs : Integrator
-        Coefficients to use in this calculation.
     x : list of list of numpy.array
         The prior x vectors.  Indexed [i][cell] using the above equation.
-
-    Returns
-    -------
-    results : Results
-        A mostly-filled results object for saving to disk.
+    rates : list of ReactionRates
+        The reaction rates for each substep.
+    eigvls : list of float
+        Eigenvalue for each substep
+    seeds : list of int
+        Seeds for each substep.
+    t : list of float
+        Time indices.
+    step_ind : int
+        Step index.
     """
 
     # Get indexing terms
     vol_list, nuc_list, burn_list, full_burn_list = op.get_results_info()
 
     # Create results
+    stages = len(x)
     results = Results()
-    results.allocate(vol_list, nuc_list, burn_list, full_burn_list, coeffs.p_terms)
+    results.allocate(vol_list, nuc_list, burn_list, full_burn_list, stages)
 
-    for mat_i, mat in enumerate(burn_list):
-        mat_str = str(mat)
-        # Compute polynomials
-        n_nuc = len(x[0][mat_i])
+    for i in range(stages):
+        for mat_i, mat in enumerate(burn_list):
+            mat_str = str(mat)
+            for nuc_i, nuc in enumerate(nuc_list):
+                results[i, mat_str, nuc] = x[i][mat_i][nuc_i]
 
-        p = np.zeros((n_nuc, coeffs.p_terms))
+    results.k = eigvls
+    results.seeds = seeds
+    results.time = t
+    results.rates = rates
 
-        for i in range(coeffs.p_terms):
-            for j in range(coeffs.int_terms):
-                if coeffs.p[i, j] != 0:
-                    p[:, i] += coeffs.p[i, j] * x[j][mat_i]
-
-        # Add to results
-        for nuc_i, nuc in enumerate(nuc_list):
-            results[mat_str, nuc] = p[nuc_i, :]
-
-    return results
+    write_results(results, "results", step_ind)
 
 def CRAM16(A, n0, dt):
     """ Chebyshev Rational Approximation Method, order 16

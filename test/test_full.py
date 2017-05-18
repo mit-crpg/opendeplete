@@ -62,7 +62,7 @@ class TestFull(unittest.TestCase):
         op = opendeplete.OpenMCOperator(geometry, settings)
 
         # Perform simulation using the predictor algorithm
-        opendeplete.integrate(op, opendeplete.predictor_c0)
+        opendeplete.predictor(op)
 
         # Load the files
         res_test = results.read_results(settings.output_dir + "/results")
@@ -87,10 +87,8 @@ class TestFull(unittest.TestCase):
 
         for mat in res_test[0].mat_to_ind:
             for nuc in res_test[0].nuc_to_ind:
-                _, y_test = utilities.evaluate_single_nuclide(res_test, 0, mat,
-                                                              nuc, use_interpolation=False)
-                _, y_old = utilities.evaluate_single_nuclide(res_old, 0, mat,
-                                                             nuc, use_interpolation=False)
+                _, y_test = utilities.evaluate_single_nuclide(res_test, mat, nuc)
+                _, y_old = utilities.evaluate_single_nuclide(res_old, mat, nuc)
 
                 # Test each point
 

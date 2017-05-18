@@ -1,13 +1,15 @@
 """ Tests for integrator.py """
 
+import copy
+import os
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
+from mpi4py import MPI
 import numpy as np
 import scipy.sparse as sp
 
-import opendeplete
-from opendeplete import integrator
+from opendeplete import integrator, ReactionRates, results
 
 class TestIntegrator(unittest.TestCase):
     """ Tests for integrator.py
@@ -18,130 +20,98 @@ class TestIntegrator(unittest.TestCase):
     regression (in test_integrator_regression.py)
     """
 
-    def test_compute_x(self):
-        """ Test the creation of a substep vector."""
-        # TODO : When the EL algorithms get published, switch testing to that.
+    def test_save_results(self):
+        """ Test data save module """
 
-        coeffs = opendeplete.ce_cm_c1
+        stages = 3
 
-        # Construct f, x
+        comm = MPI.COMM_WORLD
+        np.random.seed(comm.rank)
 
-        mat11 = [[-1.0, 0.0], [-2.0, -3.0]]
-        mat12 = [[-4.0, -2.0], [-1.5, -3.0]]
-
-        mat21 = [[-0.5, 0.0], [0.0, -2.0]]
-        mat22 = [[-3.1, -2.2], [-0.5, -2.0]]
-
-        x11 = [1.0, 1.0]
-        x12 = [0.5, 0.7]
-
-        x21 = [0.65, 0.1]
-        x22 = [0.1, 0.2]
-
-        f = []
-        x = []
-
-        f.append([sp.csr_matrix(mat11), sp.csr_matrix(mat12)])
-        f.append([sp.csr_matrix(mat21), sp.csr_matrix(mat22)])
-
-        x.append([np.array(x11), np.array(x12)])
-        x.append([np.array(x21), np.array(x22)])
-
-        dt = 0.1
-
-        class test_operator():
-            def form_matrix(self, rates, i):
-                return rates[i]
-
-        op = test_operator()
-
-        z = integrator.compute_x(op, coeffs, f, x, dt, 1, print_out=False)
-
-        # Solution from mathematica
-        z0 = np.array((0.951229424500714, 0.818730753077982))
-        z1 = np.array((0.249202138820186, 0.556735711120623))
-
-        tol = 1.0e-15
-
-        self.assertLess(np.linalg.norm(z[0] - z0), tol)
-        self.assertLess(np.linalg.norm(z[1] - z1), tol)
-
-    def test_compute_max_relerr(self):
-        """ Test the relative error code for stepsize"""
-
-        v1 = [np.array((1.0 + 3.0e-6, 1.0 + 1.0e-6, 0.1 + 1.0e-6)),
-              np.array((2.0, 3.0, 0.01 + 1.0e-6))]
-        v2 = [np.array((1.0, 1.0, 0.1)), np.array((2.0, 3.0, 0.01))]
-
-        relerr = integrator.compute_max_relerr(v1, v2)
-
-        self.assertAlmostEqual(relerr, 1.0e-6 / (0.01 + 1.0e-6))
-
-    @patch('opendeplete.integrator.Results')
-    def test_compute_results(self, mock_results):
-        """ Test the polynomial construction """
-        coeffs = opendeplete.ce_cm_c1
-
-        # Construct x
-
-        x11 = [1.0, 1.0]
-        x21 = [0.0, 0.0]
-        x31 = [0.5, 0.7]
-        x41 = [0.0, 0.0]
-        x51 = [1.5, 0.2]
-        x61 = [0.0, 0.0]
-        x71 = [2.5, 0.2]
-
-        x12 = [0.65, 0.1]
-        x22 = [0.0, 0.0]
-        x32 = [0.1, 0.2]
-        x42 = [0.0, 0.0]
-        x52 = [0.2, 1.2]
-        x62 = [0.0, 0.0]
-        x72 = [0.2, 0.2]
-
-        x = []
-
-        x.append([np.array(x11), np.array(x12)])
-        x.append([np.array(x21), np.array(x22)])
-        x.append([np.array(x31), np.array(x32)])
-        x.append([np.array(x41), np.array(x42)])
-        x.append([np.array(x51), np.array(x52)])
-        x.append([np.array(x61), np.array(x62)])
-        x.append([np.array(x71), np.array(x72)])
-
+        # Mock geometry
         op = MagicMock()
 
-        vol_list = [1.0, 1.0]
+        vol_dict = {}
+        full_burn_dict = {}
+
+        j = 0
+        for i in range(comm.size):
+            vol_dict[str(2*i)] = 1.2
+            vol_dict[str(2*i + 1)] = 1.2
+            full_burn_dict[str(2*i)] = j
+            full_burn_dict[str(2*i + 1)] = j + 1
+            j += 2
+
+        burn_list = [str(i) for i in range(2*comm.rank, 2*comm.rank + 2)]
         nuc_list = ["na", "nb"]
-        burn_list = ["a", "b"]
 
-        op.get_results_info.return_value = vol_list, nuc_list, burn_list, burn_list
+        op.get_results_info.return_value = vol_dict, nuc_list, burn_list, full_burn_dict
 
-        results = integrator.compute_results(op, coeffs, x)
+        # Construct x
+        x1 = []
+        x2 = []
 
-        # Assert allocated
-        results.allocate.assert_called_once_with(vol_list, nuc_list, burn_list, burn_list, 4)
+        for i in range(stages):
+            x1.append([np.random.rand(2), np.random.rand(2)])
+            x2.append([np.random.rand(2), np.random.rand(2)])
 
-        # Assert calls
-        # Due to how mock handles inputs, assertion of arrays must be through numpy
-        calls = [(("a", "na"), np.array((1.0, 1.5, -7.0, 5.0))),
-                 (("a", "nb"), np.array((1.0, 0.2, -1.5, 1.0))),
-                 (("b", "na"), np.array((0.65, 0.2, -2.25, 1.5))),
-                 (("b", "nb"), np.array((0.1, 1.2, -2.3, 1.2)))]
+        # Construct r
+        cell_dict = {s:i for i, s in enumerate(burn_list)}
+        r1 = ReactionRates(cell_dict, {"na":0, "nb":1}, {"ra":0, "rb":1})
+        r1.rates = np.random.rand(2, 2, 2)
 
-        actual_calls = results.__setitem__.call_args_list
+        rate1 = []
+        rate2 = []
 
-        for i, acall in enumerate(actual_calls):
+        for i in range(stages):
+            rate1.append(copy.deepcopy(r1))
+            r1.rates = np.random.rand(2, 2, 2)
+            rate2.append(copy.deepcopy(r1))
+            r1.rates = np.random.rand(2, 2, 2)
 
-            a0 = acall[0][0]
-            a1 = acall[0][1]
+        # Create global terms
+        eigvl1 = np.random.rand(stages)
+        eigvl2 = np.random.rand(stages)
+        seed1 = [np.random.randint(100) for i in range(stages)]
+        seed2 = [np.random.randint(100) for i in range(stages)]
 
-            t0 = calls[i][0]
-            t1 = calls[i][1]
+        eigvl1 = comm.bcast(eigvl1, root=0)
+        eigvl2 = comm.bcast(eigvl2, root=0)
+        seed1 = comm.bcast(seed1, root=0)
+        seed2 = comm.bcast(seed2, root=0)
 
-            self.assertEqual(a0, t0)
-            np.testing.assert_array_almost_equal(a1, t1)
+        t1 = [0.0, 1.0]
+        t2 = [1.0, 2.0]
+
+        integrator.save_results(op, x1, rate1, eigvl1, seed1, t1, 0)
+        integrator.save_results(op, x2, rate2, eigvl2, seed2, t2, 1)
+
+        # Load the files
+        res = results.read_results("results")
+
+        for i in range(stages):
+            for mat_i, mat in enumerate(burn_list):
+
+                for nuc_i, nuc in enumerate(nuc_list):
+                    self.assertEqual(res[0][i, mat, nuc], x1[i][mat_i][nuc_i])
+                    self.assertEqual(res[1][i, mat, nuc], x2[i][mat_i][nuc_i])
+                    np.testing.assert_array_equal(res[0].rates[i][mat, nuc, :],
+                                                  rate1[i][mat, nuc, :])
+                    np.testing.assert_array_equal(res[1].rates[i][mat, nuc, :],
+                                                  rate2[i][mat, nuc, :])
+
+        np.testing.assert_array_equal(res[0].k, eigvl1)
+        np.testing.assert_array_equal(res[0].seeds, seed1)
+        np.testing.assert_array_equal(res[0].time, t1)
+
+        np.testing.assert_array_equal(res[1].k, eigvl2)
+        np.testing.assert_array_equal(res[1].seeds, seed2)
+        np.testing.assert_array_equal(res[1].time, t2)
+
+        # Delete files
+        MPI.COMM_WORLD.barrier()
+        if MPI.COMM_WORLD.rank == 0:
+            os.remove("results.h5")
 
     def test_CRAM16(self):
         """ Test 16-term CRAM. """
