@@ -1,9 +1,11 @@
 """ Tests for depletion_chain.py"""
 
 from collections import OrderedDict
+import os
 import unittest
 
 import numpy as np
+from mpi4py import MPI
 
 from opendeplete import depletion_chain
 from opendeplete import reaction_rates
@@ -122,6 +124,9 @@ class TestDepletionChain(unittest.TestCase):
 
         original = open('chains/chain_test.xml', 'r').read()
         chain_xml = open('test.xml', 'r').read()
+        MPI.COMM_WORLD.barrier()
+        if MPI.COMM_WORLD.rank == 0:
+            os.remove('test.xml')
         self.assertEqual(original, chain_xml)
 
     def test_form_matrix(self):

@@ -163,7 +163,7 @@ class OpenMCOperator(Operator):
         An approximate quantity of nodes.
     npernode : int
         An approximate quantity of processes per node.  If the architecture is
-        heterogeneous, takes the smallest number of processes per node.  This 
+        heterogeneous, takes the smallest number of processes per node.  This
         assumes that OpenDeplete is running on all nodes.
     mat_tally_ind : OrderedDict of str to int
         Dictionary mapping material ID to index in tally.
@@ -465,13 +465,18 @@ class OpenMCOperator(Operator):
             Seed for this simulation.
         """
 
-        # Ensure the nonexistance of tallies.out
-        tally_name = "tallies.out"
-        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
-        try:
-            os.remove(tally_name)
-        except OSError:
-            pass
+        # Ensure the nonexistance of tallies.out, materials.xml
+        if self.rank == 0:
+            try:
+                os.remove("tallies.out")
+            except OSError:
+                pass
+            try:
+                os.remove("materials.xml")
+            except OSError:
+                pass
+
+        self.comm.barrier()
 
         # Update status
         self.set_density(vec)
@@ -501,12 +506,13 @@ class OpenMCOperator(Operator):
 
         # Check if tally file has been created, if not, sleep.
         # If OpenMC crashes, MPI will successfully handle it.
-        while not os.path.isfile(tally_name):
+        while not os.path.isfile("tallies.out"):
             time.sleep(1)
 
         time_openmc = time.time()
 
         # Extract results
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
         k = self.unpack_tallies_and_normalize(statepoint_name)
 
         self.comm.barrier()
@@ -614,23 +620,31 @@ class OpenMCOperator(Operator):
 
         xml_string = "".join(xml_strings)
 
-        # Communicate xml_string to rank=0, which will stream to disk.
-        # This means only 2 xml strings will exist on any node.
+        # Append beginning, end text.
         if self.rank == 0:
-            f = open("materials.xml", mode="w")
+            xml_string = "<?xml version='1.0' encoding='utf-8'?>\n<materials>\n" + xml_string
+        elif self.rank == self.size:
+            xml_string += "\n</materials>"
 
-            # Fill with header
-            f.write("<?xml version='1.0' encoding='utf-8'?>\n<materials>\n")
-            f.write(xml_string)
+        xml_bytes = np.fromstring(xml_string, dtype=np.uint8)
 
-            for i in range(1, self.size):
-                xml_string = self.comm.recv(source=i, tag=i)
-                f.write(xml_string)
+        # Use MPI-IO to write to disk.
+        # First, communicate to all nodes the length of their string.
+        str_len = np.zeros(self.size, np.int32)
 
-            f.write("\n</materials>")
-            f.close()
-        else:
-            self.comm.send(xml_string, dest=0, tag=self.rank)
+        str_my_len = np.zeros(1, np.int32)
+        str_my_len[0] = len(xml_string)
+        self.comm.Allgather([str_my_len, MPI.INT], [str_len, MPI.INT])
+
+        # Compute index start.
+        start_ind = np.sum(str_len[0:self.rank])
+
+        # Open/create file
+        handle = MPI.File.Open(self.comm, "materials.xml", MPI.MODE_WRONLY|MPI.MODE_CREATE)
+
+        handle.Seek(start_ind, MPI.SEEK_SET)
+        handle.Write(xml_bytes)
+        handle.Close()
 
         self.comm.barrier()
 

@@ -4,6 +4,7 @@ import os
 import unittest
 
 import numpy as np
+from mpi4py import MPI
 
 import opendeplete
 from opendeplete import results
@@ -48,8 +49,11 @@ class TestIntegratorRegression(unittest.TestCase):
         self.assertLess(np.absolute(y2[2] - s2[1]), tol)
 
         # Delete files
-        os.remove(os.path.join(settings.output_dir, "results.h5"))
-        os.rmdir(settings.output_dir)
+
+        MPI.COMM_WORLD.barrier()
+        if MPI.COMM_WORLD.rank == 0:
+            os.remove(os.path.join(settings.output_dir, "results.h5"))
+            os.rmdir(settings.output_dir)
 
 
 if __name__ == '__main__':

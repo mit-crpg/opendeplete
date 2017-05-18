@@ -4,6 +4,7 @@ import shutil
 import unittest
 
 import numpy as np
+from mpi4py import MPI
 
 import opendeplete
 from opendeplete import results
@@ -43,6 +44,7 @@ class TestFull(unittest.TestCase):
 
         settings.chain_file = "chains/chain_simple.xml"
         settings.openmc_call = "openmc"
+        settings.openmc_npernode = 2
         settings.particles = 100
         settings.batches = 100
         settings.inactive = 40
@@ -95,10 +97,10 @@ class TestFull(unittest.TestCase):
                 tol = 1.0e-6
 
                 correct = True
-                for i in range(len(y_old)):
-                    if y_old[i] != y_test[i]:
-                        if y_old[i] != 0.0:
-                            if np.abs(y_test[i] - y_old[i]) / y_old[i] > tol:
+                for i, ref in enumerate(y_old):
+                    if ref != y_test[i]:
+                        if ref != 0.0:
+                            if np.abs(y_test[i] - ref) / ref > tol:
                                 correct = False
                         else:
                             correct = False
@@ -109,7 +111,9 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        shutil.rmtree("test_full", ignore_errors=True)
+        MPI.COMM_WORLD.barrier()
+        if MPI.COMM_WORLD.rank == 0:
+            shutil.rmtree("test_full", ignore_errors=True)
 
 
 if __name__ == '__main__':
