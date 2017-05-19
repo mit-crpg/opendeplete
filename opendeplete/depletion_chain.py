@@ -25,7 +25,7 @@ except ImportError:
     from openmc.clean_xml import clean_xml_indentation
     _have_lxml = False
 
-from .nuclide import Nuclide
+from .nuclide import Nuclide, DecayTuple
 
 
 # tuple of (reaction name, possible MT values, (dA, dZ)) where dA is the change
@@ -207,13 +207,12 @@ class DepletionChain(object):
                                            data.average_energies.values())
                 sum_br = 0.0
                 for i, mode in enumerate(data.modes):
-                    nuclide.decay_type.append(','.join(mode.modes))
+                    type_ = ','.join(mode.modes)
                     if mode.daughter in decay_data:
-                        nuclide.decay_target.append(mode.daughter)
+                        target = mode.daughter
                     else:
                         print('missing {} {} {}'.format(parent, ','.join(mode.modes), mode.daughter))
-                        daughter = replace_missing(mode.daughter, decay_data)
-                        nuclide.decay_target.append(daughter)
+                        target = replace_missing(mode.daughter, decay_data)
 
                     # Write branching ratio, taking care to ensure sum is unity
                     br = mode.branching_ratio.nominal_value
@@ -221,9 +220,10 @@ class DepletionChain(object):
                     if i == len(data.modes) - 1 and sum_br != 1.0:
                         br = 1.0 - sum(m.branching_ratio.nominal_value
                                        for m in data.modes[:-1])
-                    nuclide.branching_ratio.append(br)
 
-            num_reactions = 0
+                    # Append decay mode
+                    nuclide.decay_modes.append(DecayTuple(type_, target, br))
+
             if parent in reactions:
                 reactions_available = set(reactions[parent].keys())
                 for name, mts, changes in _REACTIONS:
@@ -237,8 +237,6 @@ class DepletionChain(object):
                             depl_chain.react_to_ind[name] = reaction_index
                             reaction_index += 1
 
-                        nuclide.reaction_type.append(name)
-                        nuclide.reaction_target.append(daughter)
                         if daughter not in decay_data:
                             missing_rx_product.append((parent, name, daughter))
 
@@ -246,20 +244,18 @@ class DepletionChain(object):
                         for mt in sorted(mts):
                             if mt in reactions[parent]:
                                 q_value = reactions[parent][mt]
-                                nuclide.reaction_Q.append(q_value)
                                 break
                         else:
-                            nuclide.reaction_Q.append(0.0)
+                            q_value = 0.0
 
-                        num_reactions += 1
+                        nuclide.reactions.append(ReactionTuple(
+                            name, daughter, q_value, 1.0))
 
                 if any(mt in reactions_available for mt in [18, 19, 20, 21, 38]):
                     if parent in fpy_data:
-                        nuclide.reaction_type.append('fission')
-                        nuclide.reaction_target.append(0)
                         q_value = reactions[parent][18]
-                        nuclide.reaction_Q.append(q_value)
-                        num_reactions += 1
+                        nuclide.reactions.append(
+                            ReactionTuple('fission', 0, q_value, 1.0))
 
                         if 'fission' not in depl_chain.react_to_ind:
                             depl_chain.react_to_ind['fission'] = reaction_index
@@ -351,9 +347,9 @@ class DepletionChain(object):
             depl_chain.nuclide_dict[nuc.name] = i
 
             # Check for reaction paths
-            for r_type in nuc.reaction_type:
-                if r_type not in depl_chain.react_to_ind:
-                    depl_chain.react_to_ind[r_type] = reaction_index
+            for rx in nuc.reactions:
+                if rx.type not in depl_chain.react_to_ind:
+                    depl_chain.react_to_ind[rx.type] = reaction_index
                     reaction_index += 1
 
             depl_chain.nuclides.append(nuc)
@@ -408,16 +404,13 @@ class DepletionChain(object):
                     matrix[i, i] -= decay_constant
 
                 # Gain
-                for j in range(nuc.n_decay_paths):
-                    target_nuc = nuc.decay_target[j]
-
+                for _, target, branching_ratio in nuc.decay_modes:
                     # Allow for total annihilation for debug purposes
-                    if target_nuc != 'Nothing':
-                        k = self.nuclide_dict[target_nuc]
-
-                        branch_val = nuc.branching_ratio[j] * decay_constant
+                    if target != 'Nothing':
+                        branch_val = branching_ratio * decay_constant
 
                         if branch_val != 0.0:
+                            k = self.nuclide_dict[target]
                             matrix[k, i] += branch_val
 
             if nuc.name in self.nuc_to_react_ind:
@@ -425,34 +418,30 @@ class DepletionChain(object):
                 nuc_ind = self.nuc_to_react_ind[nuc.name]
                 nuc_rates = rates[nuc_ind, :]
 
-                for j in range(nuc.n_reaction_paths):
-                    path = nuc.reaction_type[j]
+                for r_type, target, Q, br in nuc.reactions:
                     # Extract reaction index, and then final reaction rate
-                    r_id = self.react_to_ind[path]
+                    r_id = self.react_to_ind[r_type]
                     path_rate = nuc_rates[r_id]
 
                     # Loss term
                     if path_rate != 0.0:
                         matrix[i, i] -= path_rate
 
-                    # Gain term
-                    target_nuc = nuc.reaction_target[j]
-
-                    # Allow for total annihilation for debug purposes
-                    if target_nuc != 'Nothing':
-                        if path != 'fission':
-                            k = self.nuclide_dict[target_nuc]
+                    # Gain term; allow for total annihilation for debug purposes
+                    if target != 'Nothing':
+                        if r_type != 'fission':
                             if path_rate != 0.0:
-                                matrix[k, i] += path_rate
+                                k = self.nuclide_dict[target]
+                                matrix[k, i] += path_rate * br
                         else:
                             # Assume that we should always use thermal fission
                             # yields. At some point it would be nice to account
                             # for the energy-dependence..
                             energy, data = sorted(nuc.yield_data.items())[0]
                             for product, y in data:
-                                k = self.nuclide_dict[product]
                                 yield_val = y * path_rate
                                 if yield_val != 0.0:
+                                    k = self.nuclide_dict[product]
                                     matrix[k, i] += yield_val
 
         # Use DOK matrix as intermediate representation, then convert to CSR and return

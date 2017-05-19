@@ -831,11 +831,11 @@ class OpenMCOperator(Operator):
 
         for nuclide in self.chain.nuclides:
             if nuclide.name in self.reaction_rates.nuc_to_ind:
-                ind = self.reaction_rates.nuc_to_ind[nuclide.name]
-
-                if 'fission' in nuclide.reaction_type:
-                    j = nuclide.reaction_type.index('fission')
-                    power_vec[ind] = nuclide.reaction_Q[j]*1e-6
+                for rx in nuclide.reactions:
+                    if rx.type == 'fission':
+                        ind = self.reaction_rates.nuc_to_ind[nuclide.name]
+                        power_vec[ind] = rx.Q*1e-6
+                        break
 
         # Extract results
         for i, mat in enumerate(self.number.burn_mat_list):
@@ -861,8 +861,8 @@ class OpenMCOperator(Operator):
 
             # Divide by total number and store
             for i_nuc_results in nuc_ind:
-                for react in react_ind:
-                    if number[i_nuc_results] != 0.0:
+                if number[i_nuc_results] != 0.0:
+                    for react in react_ind:
                         results_expanded[i_nuc_results, react] /= number[i_nuc_results]
 
             self.reaction_rates.rates[i, :, :] = results_expanded
