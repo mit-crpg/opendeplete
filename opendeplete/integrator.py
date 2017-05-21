@@ -226,9 +226,7 @@ def save_results(op, x, rates, eigvls, seeds, t, step_ind):
 
     for i in range(stages):
         for mat_i, mat in enumerate(burn_list):
-            mat_str = str(mat)
-            for nuc_i, nuc in enumerate(nuc_list):
-                results[i, mat_str, nuc] = x[i][mat_i][nuc_i]
+            results[i, mat_i, :] = x[i][mat_i][:]
 
     results.k = eigvls
     results.seeds = seeds
