@@ -23,7 +23,8 @@ suite_normal = [
     "test.test_integrator",
     "test.test_integrator_regression",
     "test.test_nuclide",
-    "test.test_reaction_rates"
+    "test.test_reaction_rates",
+    "test.test_utilities"
     ]
 
 suite_full = [
