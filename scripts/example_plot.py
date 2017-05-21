@@ -20,14 +20,9 @@ rxn = "(n,gamma)"
 # Total number of nuclides
 plt.figure()
 # Pointwise data
-x, y = evaluate_single_nuclide(results, 0, cell, nuc, use_interpolation=False)
-plt.semilogy(x, y, label="Pointwise")
+x, y = evaluate_single_nuclide(results, cell, nuc)
+plt.semilogy(x, y)
 
-# Interpolated data
-x, y = evaluate_single_nuclide(results, 1000, cell, nuc, use_interpolation=True)
-plt.semilogy(x, y, label="C1 Continuous")
-
-plt.legend(loc="best")
 plt.xlabel("Time, s")
 plt.ylabel("Total Number")
 plt.savefig("number.pdf")

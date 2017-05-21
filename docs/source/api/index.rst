@@ -12,9 +12,9 @@ Core Classes
    :nosignatures:
 
    opendeplete.Operator
-   opendeplete.Geometry
-   opendeplete.Materials
    opendeplete.Settings
+   opendeplete.OpenMCOperator
+   opendeplete.OpenMCSettings
 
 Data Classes
 ------------
@@ -23,10 +23,10 @@ Data Classes
    :toctree: generated
    :nosignatures:
 
-   opendeplete.Integrator
+   opendeplete.AtomNumber
    opendeplete.DepletionChain
+   opendeplete.Materials
    opendeplete.Nuclide
-   opendeplete.Yield
 
 Results Classes
 ---------------

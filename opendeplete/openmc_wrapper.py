@@ -495,6 +495,8 @@ class OpenMCOperator(Operator):
             subinfo.Set("npernode", str(self.settings.openmc_npernode))
             subinfo.Set("bind_to", "none")
             threads_omp = int(np.floor(self.npernode / self.settings.openmc_npernode))
+            if threads_omp < 1:
+                threads_omp = 1
             subinfo.Set("env", "OMP_NUM_THREADS=" + str(threads_omp))
 
             # Run model
