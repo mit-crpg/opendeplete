@@ -991,3 +991,43 @@ def clean_up_openmc():
     openmc.reset_auto_surface_id()
     openmc.reset_auto_cell_id()
     openmc.reset_auto_universe_id()
+
+def lomem_num_instances(geometry):
+    """ Gets number of instances without running out of RAM.
+
+    OpenMC.determine_paths() fills each material with a large array of strings.
+    To avoid this, only one rank will perform it and communicate the results
+    to other ranks.  It will then delete the strings.
+
+    Parameters
+    ----------
+    geometry - OpenMC geometry
+        The geometry to extract num_instances
+
+    Returns
+    -------
+    num_instances - OrderedDict of str to int
+        Number of instances for each cell.
+    """
+
+    comm = MPI.COMM_WORLD
+
+    num_instances = []
+
+    if comm.rank == 0:
+        # Perform determine_paths, save result, clear strings.
+        geometry.determine_paths()
+
+        cells = geometry.get_all_cells()
+        num_instances = OrderedDict()
+
+        for cell in cells:
+            num_instances[cell] = cells[cell].num_instances
+
+        for cell in cells:
+            cells[cell]._paths = []
+            cells[cell].fill._paths = []
+
+    num_instances = comm.bcast(num_instances, root=0)
+
+    return num_instances
