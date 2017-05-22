@@ -284,6 +284,10 @@ class Results(object):
             time_shape[0] = new_shape
             time_dset.resize(time_shape)
 
+        # If nothing to write, just return
+        if len(self.mat_to_ind) == 0:
+            return
+
         # Add data
         # Note, for the last step, self.n_stages = 1, even if n_stages != 1.
         n_stages = self.n_stages
@@ -293,9 +297,11 @@ class Results(object):
         for i in range(n_stages):
             number_dset[index, i, low:high+1, :] = self.data[i, :, :]
             rxn_dset[index, i, low:high+1, :, :] = self.rates[i][:, :, :]
-            eigenvalues_dset[index, i] = self.k[i]
-            seeds_dset[index, i] = self.seeds[i]
-        time_dset[index, :] = self.time
+            if self.comm.rank == 0:
+                eigenvalues_dset[index, i] = self.k[i]
+                seeds_dset[index, i] = self.seeds[i]
+        if self.comm.rank == 0:
+            time_dset[index, :] = self.time
 
     def from_hdf5(self, handle, index):
         """ Loads results object from HDF5.
