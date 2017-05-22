@@ -218,10 +218,12 @@ class Results(object):
 
         handle.create_dataset("number", (1, n_stages, n_mats, n_nuc_number),
                               maxshape=(None, n_stages, n_mats, n_nuc_number),
+                              chunks=(1, 1, n_mats, n_nuc_number),
                               dtype='float64')
 
         handle.create_dataset("reaction rates", (1, n_stages, n_mats, n_nuc_rxn, n_rxn),
                               maxshape=(None, n_stages, n_mats, n_nuc_rxn, n_rxn),
+                              chunks=(1, 1, n_mats, n_nuc_rxn, n_rxn),
                               dtype='float64')
 
         handle.create_dataset("eigenvalues", (1, n_stages),
@@ -285,15 +287,15 @@ class Results(object):
         # Add data
         # Note, for the last step, self.n_stages = 1, even if n_stages != 1.
         n_stages = self.n_stages
-        for mat in self.mat_to_ind:
-            hdf_ind = self.mat_to_hdf5_ind[mat]
-            ind = self.mat_to_ind[mat]
-            for i in range(n_stages):
-                number_dset[index, i, hdf_ind, :] = self.data[i, ind, :]
-                rxn_dset[index, i, hdf_ind, :, :] = self.rates[i][mat, :, :]
-                eigenvalues_dset[index, i] = self.k[i]
-                seeds_dset[index, i] = self.seeds[i]
-            time_dset[index, :] = self.time
+        inds = [self.mat_to_hdf5_ind[mat] for mat in self.mat_to_ind]
+        low = min(inds)
+        high = max(inds)
+        for i in range(n_stages):
+            number_dset[index, i, low:high+1, :] = self.data[i, :, :]
+            rxn_dset[index, i, low:high+1, :, :] = self.rates[i][:, :, :]
+            eigenvalues_dset[index, i] = self.k[i]
+            seeds_dset[index, i] = self.seeds[i]
+        time_dset[index, :] = self.time
 
     def from_hdf5(self, handle, index):
         """ Loads results object from HDF5.

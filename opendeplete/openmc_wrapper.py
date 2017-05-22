@@ -625,7 +625,7 @@ class OpenMCOperator(Operator):
         # Append beginning, end text.
         if self.rank == 0:
             xml_string = "<?xml version='1.0' encoding='utf-8'?>\n<materials>\n" + xml_string
-        elif self.rank == self.size:
+        if self.rank == self.size:
             xml_string += "\n</materials>"
 
         xml_bytes = np.fromstring(xml_string, dtype=np.uint8)
