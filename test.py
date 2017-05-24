@@ -19,10 +19,12 @@ import argparse
 
 suite_normal = [
     "test.test_atom_number",
+    "test.test_cram",
+    "test.test_cecm_regression",
     "test.test_depletion_chain",
     "test.test_integrator",
-    "test.test_integrator_regression",
     "test.test_nuclide",
+    "test.test_predictor_regression",
     "test.test_reaction_rates",
     "test.test_utilities"
     ]

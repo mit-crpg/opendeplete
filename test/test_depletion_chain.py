@@ -90,6 +90,9 @@ class TestDepletionChain(unittest.TestCase):
     def test_xml_write(self):
         """Test writing a depletion chain to XML."""
 
+        # Prevent different MPI ranks from conflicting
+        filename = 'test%u.xml' % MPI.COMM_WORLD.rank
+
         A = nuclide.Nuclide()
         A.name = "A"
         A.half_life = 2.36520e4
@@ -120,14 +123,13 @@ class TestDepletionChain(unittest.TestCase):
 
         chain = depletion_chain.DepletionChain()
         chain.nuclides = [A, B, C]
-        chain.xml_write('test.xml')
+        chain.xml_write(filename)
 
         original = open('chains/chain_test.xml', 'r').read()
-        chain_xml = open('test.xml', 'r').read()
-        MPI.COMM_WORLD.barrier()
-        if MPI.COMM_WORLD.rank == 0:
-            os.remove('test.xml')
+        chain_xml = open(filename, 'r').read()
         self.assertEqual(original, chain_xml)
+
+        os.remove(filename)
 
     def test_form_matrix(self):
         """ Using chain_test, and a dummy reaction rate, compute the matrix. """

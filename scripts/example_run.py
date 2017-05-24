@@ -35,4 +35,4 @@ settings.output_dir = 'test'
 op = opendeplete.OpenMCOperator(geometry, settings)
 
 # Perform simulation using the MCNPX/MCNP6 algorithm
-opendeplete.cecm(op)
+opendeplete.integrator.cecm(op)

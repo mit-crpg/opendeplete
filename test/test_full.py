@@ -62,7 +62,7 @@ class TestFull(unittest.TestCase):
         op = opendeplete.OpenMCOperator(geometry, settings)
 
         # Perform simulation using the predictor algorithm
-        opendeplete.predictor(op)
+        opendeplete.integrator.predictor(op)
 
         # Load the files
         res_test = results.read_results(settings.output_dir + "/results")
