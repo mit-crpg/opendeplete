@@ -152,6 +152,10 @@ class TestAtomNumber(unittest.TestCase):
 
         np.testing.assert_array_equal(sl, np.array([1.0, 2.0]))
 
+        sl = number.get_mat_slice("10000")
+
+        np.testing.assert_array_equal(sl, np.array([1.0, 2.0]))
+
     def test_set_mat_slice(self):
         """Tests getting slices."""
 
@@ -166,6 +170,10 @@ class TestAtomNumber(unittest.TestCase):
         self.assertEqual(number[0, 0], 1.0)
         self.assertEqual(number[0, 1], 2.0)
 
+        number.set_mat_slice("10000", [3.0, 4.0])
+
+        self.assertEqual(number[0, 0], 3.0)
+        self.assertEqual(number[0, 1], 4.0)
 
 
 if __name__ == '__main__':

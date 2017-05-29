@@ -4,6 +4,7 @@ import shutil
 import unittest
 
 import numpy as np
+from mpi4py import MPI
 
 import opendeplete
 from opendeplete import results
@@ -43,6 +44,7 @@ class TestFull(unittest.TestCase):
 
         settings.chain_file = "chains/chain_simple.xml"
         settings.openmc_call = "openmc"
+        settings.openmc_npernode = 2
         settings.particles = 100
         settings.batches = 100
         settings.inactive = 40
@@ -60,7 +62,7 @@ class TestFull(unittest.TestCase):
         op = opendeplete.OpenMCOperator(geometry, settings)
 
         # Perform simulation using the predictor algorithm
-        opendeplete.integrate(op, opendeplete.predictor_c0)
+        opendeplete.integrator.predictor(op)
 
         # Load the files
         res_test = results.read_results(settings.output_dir + "/results")
@@ -68,48 +70,48 @@ class TestFull(unittest.TestCase):
         # Load the reference
         res_old = results.read_results("test/test_reference")
 
-        # Assert same cells
-        for cell in res_old[0].cell_to_ind:
-            self.assertIn(cell, res_test[0].cell_to_ind,
-                          msg="Cell " + cell + " not in new results.")
+        # Assert same mats
+        for mat in res_old[0].mat_to_ind:
+            self.assertIn(mat, res_test[0].mat_to_ind,
+                          msg="Cell " + mat + " not in new results.")
         for nuc in res_old[0].nuc_to_ind:
             self.assertIn(nuc, res_test[0].nuc_to_ind,
                           msg="Nuclide " + nuc + " not in new results.")
 
-        for cell in res_test[0].cell_to_ind:
-            self.assertIn(cell, res_old[0].cell_to_ind,
-                          msg="Cell " + cell + " not in old results.")
+        for mat in res_test[0].mat_to_ind:
+            self.assertIn(mat, res_old[0].mat_to_ind,
+                          msg="Cell " + mat + " not in old results.")
         for nuc in res_test[0].nuc_to_ind:
             self.assertIn(nuc, res_old[0].nuc_to_ind,
                           msg="Nuclide " + nuc + " not in old results.")
 
-        for cell in res_test[0].cell_to_ind:
+        for mat in res_test[0].mat_to_ind:
             for nuc in res_test[0].nuc_to_ind:
-                _, y_test = utilities.evaluate_single_nuclide(res_test, 0, cell,
-                                                              nuc, use_interpolation=False)
-                _, y_old = utilities.evaluate_single_nuclide(res_old, 0, cell,
-                                                             nuc, use_interpolation=False)
+                _, y_test = utilities.evaluate_single_nuclide(res_test, mat, nuc)
+                _, y_old = utilities.evaluate_single_nuclide(res_old, mat, nuc)
 
                 # Test each point
 
                 tol = 1.0e-6
 
                 correct = True
-                for i in range(len(y_old)):
-                    if y_old[i] != y_test[i]:
-                        if y_old[i] != 0.0:
-                            if np.abs(y_test[i] - y_old[i]) / y_old[i] > tol:
+                for i, ref in enumerate(y_old):
+                    if ref != y_test[i]:
+                        if ref != 0.0:
+                            if np.abs(y_test[i] - ref) / ref > tol:
                                 correct = False
                         else:
                             correct = False
 
                 self.assertTrue(correct,
-                                msg="Discrepancy in cell " + cell + " and nuc " + nuc
+                                msg="Discrepancy in mat " + mat + " and nuc " + nuc
                                 + "\n" + str(y_old) + "\n" + str(y_test))
 
     def tearDown(self):
         """ Clean up files"""
-        shutil.rmtree("test_full", ignore_errors=True)
+        MPI.COMM_WORLD.barrier()
+        if MPI.COMM_WORLD.rank == 0:
+            shutil.rmtree("test_full", ignore_errors=True)
 
 
 if __name__ == '__main__':

@@ -12,5 +12,4 @@ from .reaction_rates import *
 from .function import *
 from .results import *
 from .integrator import *
-from .integrator_coeffs import *
 from .utilities import *

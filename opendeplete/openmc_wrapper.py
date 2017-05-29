@@ -5,22 +5,26 @@ This module implements the OpenDeplete -> OpenMC linkage.
 
 import copy
 from collections import OrderedDict
-import concurrent.futures
 import os
-from itertools import repeat
 import random
-from subprocess import call
 import sys
 import time
-import xml.etree.ElementTree as ET
+try:
+    import lxml.etree as ET
+    _have_lxml = True
+except ImportError:
+    import xml.etree.ElementTree as ET
+    from openmc.clean_xml import clean_xml_indentation
+    _have_lxml = False
 
 import h5py
+from mpi4py import MPI
 import numpy as np
 import openmc
 from openmc.stats import Box
 
 from .atom_number import AtomNumber
-from .depletion_chain import DepletionChain, matrix_wrapper
+from .depletion_chain import DepletionChain
 from .reaction_rates import ReactionRates
 from .function import Settings, Operator
 
@@ -40,10 +44,11 @@ class OpenMCSettings(Settings):
     chain_file : str
         Path to the depletion chain xml file.  Defaults to the environment
         variable "OPENDEPLETE_CHAIN" if it exists.
-    openmc_call : list of str
-        The command to be used with subprocess.call to run a simulation. If no
-        arguments are to be passed, a string suffices.  To run with mpiexec,
-        a list of strings is needed.
+    openmc_call : str
+        OpenMC executable path.  Defaults to "openmc".
+    openmc_npernode : int
+        Number of openmc MPI ranks per node.  OpenMP will be used to fill the
+        rest of the node.  Defaults to 1 for memory reasons.
     particles : int
         Number of particles to simulate per batch.
     batches : int
@@ -72,7 +77,8 @@ class OpenMCSettings(Settings):
             self.chain_file = os.environ["OPENDEPLETE_CHAIN"]
         except KeyError:
             self.chain_file = None
-        self.openmc_call = None
+        self.openmc_call = "openmc"
+        self.openmc_npernode = 1
         self.particles = None
         self.batches = None
         self.inactive = None
@@ -147,11 +153,61 @@ class OpenMCOperator(Operator):
         reaction_rates.
     n_nuc : int
         Number of nuclides considered in the decay chain.
-
+    comm : MPI.COMM_WORLD
+        The mpi communicator.
+    rank : int
+        MPI rank of this object.
+    size : int
+        The number of MPI threads.
+    nodes : int
+        An approximate quantity of nodes.
+    npernode : int
+        An approximate quantity of processes per node.  If the architecture is
+        heterogeneous, takes the smallest number of processes per node.  This
+        assumes that OpenDeplete is running on all nodes.
+    mat_tally_ind : OrderedDict of str to int
+        Dictionary mapping material ID to index in tally.
     """
 
     def __init__(self, geometry, settings):
         Operator.__init__(self, settings)
+
+        self.comm = MPI.COMM_WORLD
+
+        self.rank = self.comm.rank
+        self.size = self.comm.size
+
+        self.nodes = 0
+        self.npernode = 0
+
+        # Compute number of nodes and size of each node.
+        subcomm = self.comm.Split_type(MPI.COMM_TYPE_SHARED)
+        if self.rank == 0:
+            sub_rank = np.zeros(self.size, np.int32)
+            for i in range(1, self.size):
+                sub_rank[i] = self.comm.recv(source=i, tag=0)
+
+            # Compute the quantity of each rank
+            quantity = np.zeros(np.max(sub_rank) + 1, np.int32)
+            for i in range(self.size):
+                quantity[sub_rank[i]] += 1
+
+            # Starting from the bottom, compute the largest "block"
+            j = 1
+            for i in range(1, len(quantity)):
+                if quantity[i-1] != quantity[i]:
+                    break
+                else:
+                    j = i + 1
+            self.nodes = quantity[j-1]
+            self.npernode = j
+        else:
+            self.comm.send(subcomm.rank, dest=0, tag=0)
+
+        self.nodes = self.comm.bcast(self.nodes, root=0)
+        self.npernode = self.comm.bcast(self.npernode, root=0)
+        self.comm.barrier()
+
         self.geometry = geometry
         self.materials = []
         self.seed = 0
@@ -166,11 +222,36 @@ class OpenMCOperator(Operator):
         # Read depletion chain
         self.chain = DepletionChain.xml_read(settings.chain_file)
 
-        # Clear out OpenMC
-        clean_up_openmc()
+        # Clear out OpenMC, create task lists, distribute
+        if self.rank == 0:
+            clean_up_openmc()
+            mat_burn_lists, \
+                mat_not_burn_lists, \
+                volume, \
+                self.mat_tally_ind, \
+                nuc_dict = self.extract_mat_ids()
 
-        # Extract number densities from geometry
-        self.extract_all_materials()
+            mat_burn = mat_burn_lists[0]
+            mat_not_burn = mat_not_burn_lists[0]
+
+            # Send assignments to all
+            for i in range(1, self.size):
+                self.comm.send(mat_burn_lists[i], dest=i, tag=0)
+                self.comm.send(mat_not_burn_lists[i], dest=i, tag=1)
+                self.comm.send(nuc_dict, dest=i, tag=2)
+        else:
+            # Receive assignments
+            mat_burn = self.comm.recv(source=0, tag=0)
+            mat_not_burn = self.comm.recv(source=0, tag=1)
+            nuc_dict = self.comm.recv(source=0, tag=2)
+            volume = None
+            self.mat_tally_ind = None
+
+        volume = self.comm.bcast(volume, root=0)
+        self.mat_tally_ind = self.comm.bcast(self.mat_tally_ind, root=0)
+
+        # Extract number densities from the geometry
+        self.extract_number(mat_burn, mat_not_burn, volume, nuc_dict)
 
         # Load participating nuclides
         self.load_participating()
@@ -178,17 +259,30 @@ class OpenMCOperator(Operator):
         # Create reaction rate tables
         self.initialize_reaction_rates()
 
-    def extract_all_materials(self):
-        """ Iterate through all cells, create number density vectors from mats."""
+    def extract_mat_ids(self):
+        """ Extracts materials and assigns them to processes.
 
-        # Get a set of materials, nuclides
+        Returns
+        -------
+        mat_burn_lists : list of list of int
+            List of burnable materials indexed by rank.
+        mat_not_burn_lists : list of list of int
+            List of non-burnable materials indexed by rank.
+        volume : OrderedDict of str to float
+            Volume of each cell
+        mat_tally_ind : OrderedDict of str to int
+            Dictionary mapping material ID to index in tally.
+        nuc_dict : OrderedDict of str to int
+            Nuclides in order of how they'll appear in the simulation.
+        """
+
         mat_burn = set()
         mat_not_burn = set()
         nuc_set = set()
 
         volume = OrderedDict()
 
-        # Iterate once through the geometry to allocate arrays
+        # Iterate once through the geometry to get dictionaries
         cells = self.geometry.get_all_material_cells()
         for cell_id in cells:
             cell = cells[cell_id]
@@ -221,7 +315,7 @@ class OpenMCOperator(Operator):
             if volume[mat_id] is None:
                 need_vol.append(mat_id)
 
-        if len(need_vol) > 0:
+        if need_vol:
             exit("Need volumes for materials: " + str(need_vol))
 
         # Alphabetize the sets
@@ -238,6 +332,54 @@ class OpenMCOperator(Operator):
             if nuc not in nuc_dict:
                 nuc_dict[nuc] = i
                 i += 1
+
+        # Decompose geometry
+        n = self.size
+        chunk, extra = divmod(len(mat_burn), n)
+        mat_burn_lists = []
+        j = 0
+        for i in range(n):
+            if i < extra:
+                c_chunk = chunk + 1
+            else:
+                c_chunk = chunk
+            mat_burn_chunk = mat_burn[j:j + c_chunk]
+            j += c_chunk
+            mat_burn_lists.append(mat_burn_chunk)
+
+        chunk, extra = divmod(len(mat_not_burn), n)
+        mat_not_burn_lists = []
+        j = 0
+        for i in range(n):
+            if i < extra:
+                c_chunk = chunk + 1
+            else:
+                c_chunk = chunk
+            mat_not_burn_chunk = mat_not_burn[j:j + c_chunk]
+            j += c_chunk
+            mat_not_burn_lists.append(mat_not_burn_chunk)
+
+        mat_tally_ind = OrderedDict()
+
+        for i, mat in enumerate(mat_burn):
+            mat_tally_ind[mat] = i
+
+        return mat_burn_lists, mat_not_burn_lists, volume, mat_tally_ind, nuc_dict
+
+    def extract_number(self, mat_burn, mat_not_burn, volume, nuc_dict):
+        """ Construct self.number read from geometry
+
+        Parameters
+        ----------
+        mat_burn : list of int
+            Materials to be burned managed by this thread.
+        mat_not_burn
+            Materials not to be burned managed by this thread.
+        volume : OrderedDict of str to float
+            Volumes for the above materials.
+        nuc_dict : OrderedDict of str to int
+            Nuclides to be used in the simulation.
+        """
 
         # Same with materials
         mat_dict = OrderedDict()
@@ -263,10 +405,12 @@ class OpenMCOperator(Operator):
         cells = self.geometry.get_all_material_cells()
         for cell in cells.values():
             if isinstance(cell.fill, openmc.Material):
-                self.set_number_from_mat(cell.fill)
+                if str(cell.fill.id) in mat_dict:
+                    self.set_number_from_mat(cell.fill)
             else:
                 for mat in cell.fill:
-                    self.set_number_from_mat(mat)
+                    if str(mat.id) in mat_dict:
+                        self.set_number_from_mat(mat)
 
     def set_number_from_mat(self, mat):
         """ Extracts material and number densities from openmc.Material
@@ -321,6 +465,19 @@ class OpenMCOperator(Operator):
             Seed for this simulation.
         """
 
+        # Ensure the nonexistance of tallies.out, materials.xml
+        if self.rank == 0:
+            try:
+                os.remove("tallies.out")
+            except OSError:
+                pass
+            try:
+                os.remove("materials.xml")
+            except OSError:
+                pass
+
+        self.comm.barrier()
+
         # Update status
         self.set_density(vec)
 
@@ -331,28 +488,64 @@ class OpenMCOperator(Operator):
 
         time_start = time.time()
 
-        # Run model
-        call(self.settings.openmc_call)
+        if self.rank == 0:
+            # Unfortunately, this is API dependent.
+            # This is for OpenMPI because the options are documented.
+            subinfo = MPI.Info.Create()
+            subinfo.Set("npernode", str(self.settings.openmc_npernode))
+            subinfo.Set("bind_to", "none")
+            threads_omp = int(np.floor(self.npernode / self.settings.openmc_npernode))
+            if threads_omp < 1:
+                threads_omp = 1
+            subinfo.Set("env", "OMP_NUM_THREADS=" + str(threads_omp))
+
+            # Run model
+            threads = self.settings.openmc_npernode * self.nodes
+            MPI.COMM_SELF.Spawn(self.settings.openmc_call,
+                                info=subinfo, maxprocs=threads)
+
+            subinfo.Free()
+
+        # Check if tally file has been created, if not, sleep.
+        # If OpenMC crashes, MPI will successfully handle it.
+        while not os.path.isfile("tallies.out"):
+            time.sleep(1)
+
         time_openmc = time.time()
 
-        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
-
         # Extract results
+        statepoint_name = "statepoint.{}.h5".format(self.settings.batches)
         k = self.unpack_tallies_and_normalize(statepoint_name)
 
-        time_unpack = time.time()
-        os.remove(statepoint_name)
+        self.comm.barrier()
 
-        # Compute matrices
-        mat = self.depletion_matrix_list()
-        time_matrix = time.time()
+        if self.rank == 0:
+            time_unpack = time.time()
+            os.remove(statepoint_name)
 
-        if print_out:
-            print("Time to openmc: ", time_openmc - time_start)
-            print("Time to unpack: ", time_unpack - time_openmc)
-            print("Time to matrix: ", time_matrix - time_unpack)
+            if print_out:
+                print("Time to openmc: ", time_openmc - time_start)
+                print("Time to unpack: ", time_unpack - time_openmc)
 
-        return mat, k, self.reaction_rates, self.seed
+        return k, self.reaction_rates, self.seed
+
+    def form_matrix(self, y, mat):
+        """ Forms the depletion matrix.
+
+        Parameters
+        ----------
+        y : numpy.ndarray
+            An array representing reaction rates for this cell.
+        mat : int
+            Material id.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Sparse matrix representing the depletion matrix.
+        """
+
+        return copy.deepcopy(self.chain.form_matrix(y[mat, :, :]))
 
     def initial_condition(self):
         """ Performs final setup and returns initial condition.
@@ -364,33 +557,36 @@ class OpenMCOperator(Operator):
         """
 
         # Write geometry.xml
-        self.geometry.export_to_xml()
+        if self.rank == 0:
+            self.geometry.export_to_xml()
 
         # Return number density vector
         return self.total_density_list()
 
     def generate_materials_xml(self):
-        """ Creates materials.xml from self.number_density.
+        """ Creates materials.xml from self.number.
 
-        Iterates through each material in self.number_density and creates the
-        openmc material object to generate materials.xml.
+        Due to uncertainty with how MPI interacts with OpenMC API, this
+        constructs the XML manually.  The long term goal is to do this
+        either through PHDF5 or direct memory writing.
         """
-        openmc.reset_auto_material_id()
 
-        materials = []
+        xml_strings = []
 
-        for key_mat in self.number.mat_to_ind:
-            mat_id = self.number.mat_to_ind[key_mat]
+        for mat in self.number.mat_to_ind:
+            root = ET.Element("material")
+            root.set("id", mat)
 
-            mat = openmc.Material(material_id=int(key_mat))
+            density = ET.SubElement(root, "density")
+            density.set("units", "sum")
 
-            mat.temperature = self.materials[mat_id].temperature
-            mat._sab = self.materials[mat_id].sab
+            temperature = ET.SubElement(root, "temperature")
+            mat_id = self.number.mat_to_ind[mat]
+            temperature.text = str(self.materials[mat_id].temperature)
 
-            for key_nuc in self.number.nuc_to_ind:
-                # Check if in participating nuclides
-                if key_nuc in self.participating_nuclides:
-                    val = 1.0e-24*self.number.get_atom_density(key_mat, key_nuc)
+            for nuc in self.number.nuc_to_ind:
+                if nuc in self.participating_nuclides:
+                    val = 1.0e-24*self.number.get_atom_density(mat, nuc)
 
                     # If nuclide is zero, do not add to the problem.
                     if val > 0.0:
@@ -401,21 +597,58 @@ class OpenMCOperator(Operator):
 
                             val = val_round * 10**val_magnitude
 
-                        mat.add_nuclide(key_nuc, val)
+                        nuc_element = ET.SubElement(root, "nuclide")
+                        nuc_element.set("ao", str(val))
+                        nuc_element.set("name", nuc)
                     else:
                         # Only output warnings if values are significantly
                         # negative.  CRAM does not guarantee positive values.
                         if val < -1.0e-21:
-                            print("WARNING: nuclide ", key_nuc, " in material ", key_mat,
+                            print("WARNING: nuclide ", nuc, " in material ", mat,
                                   " is negative (density = ", val, " at/barn-cm)")
-                        self.number[key_mat, key_nuc] = 0.0
+                        self.number[mat, nuc] = 0.0
 
-            mat.set_density(units='sum')
+            for sab in self.materials[mat_id].sab:
+                sab_el = ET.SubElement(root, "sab")
+                sab_el.set("name", sab)
 
-            materials.append(mat)
+            if _have_lxml:
+                fragment = ET.tostring(root, encoding="unicode", pretty_print="true")
+                xml_strings.append(fragment)
+            else:
+                clean_xml_indentation(root, spaces_per_level=2)
+                fragment = ET.tostring(root, encoding="unicode", pretty_print="true")
+                xml_strings.append(fragment)
 
-        materials_file = openmc.Materials(materials)
-        materials_file.export_to_xml()
+        xml_string = "".join(xml_strings)
+
+        # Append beginning, end text.
+        if self.rank == 0:
+            xml_string = "<?xml version='1.0' encoding='utf-8'?>\n<materials>\n" + xml_string
+        if self.rank == self.size:
+            xml_string += "\n</materials>"
+
+        xml_bytes = np.fromstring(xml_string, dtype=np.uint8)
+
+        # Use MPI-IO to write to disk.
+        # First, communicate to all nodes the length of their string.
+        str_len = np.zeros(self.size, np.int32)
+
+        str_my_len = np.zeros(1, np.int32)
+        str_my_len[0] = len(xml_string)
+        self.comm.Allgather([str_my_len, MPI.INT], [str_len, MPI.INT])
+
+        # Compute index start.
+        start_ind = np.sum(str_len[0:self.rank])
+
+        # Open/create file
+        handle = MPI.File.Open(self.comm, "materials.xml", MPI.MODE_WRONLY|MPI.MODE_CREATE)
+
+        handle.Seek(start_ind, MPI.SEEK_SET)
+        handle.Write(xml_bytes)
+        handle.Close()
+
+        self.comm.barrier()
 
     def generate_settings_xml(self):
         """ Generates settings.xml.
@@ -428,34 +661,35 @@ class OpenMCOperator(Operator):
             Rewrite to generalize source box.
         """
 
-        batches = self.settings.batches
-        inactive = self.settings.inactive
-        particles = self.settings.particles
+        if self.rank == 0:
+            batches = self.settings.batches
+            inactive = self.settings.inactive
+            particles = self.settings.particles
 
-        # Just a generic settings file to get it running.
-        settings_file = openmc.Settings()
-        settings_file.batches = batches
-        settings_file.inactive = inactive
-        settings_file.particles = particles
-        settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
-                                                       self.settings.upper_right))
+            # Just a generic settings file to get it running.
+            settings_file = openmc.Settings()
+            settings_file.batches = batches
+            settings_file.inactive = inactive
+            settings_file.particles = particles
+            settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
+                                                           self.settings.upper_right))
 
-        if self.settings.entropy_dimension is not None:
-            entropy_mesh = openmc.Mesh()
-            entropy_mesh.lower_left = self.settings.lower_left
-            entropy_mesh.upper_right = self.settings.upper_right
-            entropy_mesh.dimension = self.settings.entropy_dimension
-            settings_file.entropy_mesh = entropy_mesh
+            if self.settings.entropy_dimension is not None:
+                entropy_mesh = openmc.Mesh()
+                entropy_mesh.lower_left = self.settings.lower_left
+                entropy_mesh.upper_right = self.settings.upper_right
+                entropy_mesh.dimension = self.settings.entropy_dimension
+                settings_file.entropy_mesh = entropy_mesh
 
-        # Set seed
-        if self.settings.constant_seed is not None:
-            seed = self.settings.constant_seed
-        else:
-            seed = random.randint(1, sys.maxsize-1)
+            # Set seed
+            if self.settings.constant_seed is not None:
+                seed = self.settings.constant_seed
+            else:
+                seed = random.randint(1, sys.maxsize-1)
 
-        settings_file.seed = self.seed = seed
+            settings_file.seed = self.seed = seed
 
-        settings_file.export_to_xml()
+            settings_file.export_to_xml()
 
     def generate_tally_xml(self):
         """ Generates tally.xml.
@@ -464,61 +698,51 @@ class OpenMCOperator(Operator):
         currently in the problem, this function automatically generates a
         tally.xml for the simulation.
         """
-        # ----------------------------------------------------------------------
-        # Create tallies for depleting regions
-        tally_ind = 1
-        mat_filter_dep = openmc.MaterialFilter([int(id) for id in self.number.burn_mat_list])
-        tallies_file = openmc.Tallies()
 
-        nuc_superset = set()
+        nuc_set = set()
 
         # Create the set of all nuclides in the decay chain in cells marked for
         # burning in which the number density is greater than zero.
-
         for nuc in self.number.nuc_to_ind:
             if nuc in self.participating_nuclides:
                 if np.sum(self.number[:, nuc]) > 0.0:
-                    nuc_superset.add(nuc)
+                    nuc_set.add(nuc)
 
-        # For each reaction in the chain, for each nuclide, and for each
-        # cell, make a tally
-        tally_dep = openmc.Tally(tally_id=tally_ind)
-        for key in nuc_superset:
-            if key in self.chain.nuclide_dict:
-                tally_dep.nuclides.append(key)
+        # Communicate which nuclides have nonzeros to rank 0
+        if self.rank == 0:
+            for i in range(1, self.size):
+                nuc_newset = self.comm.recv(source=i, tag=i)
+                for nuc in nuc_newset:
+                    nuc_set.add(nuc)
 
-        for reaction in self.chain.react_to_ind:
-            tally_dep.scores.append(reaction)
+            # Sort them in the same order as self.number
+            nuc_list = []
+            for nuc in self.number.nuc_to_ind:
+                if nuc in nuc_set:
+                    nuc_list.append(nuc)
+        else:
+            self.comm.send(nuc_set, dest=0, tag=self.rank)
 
-        tallies_file.append(tally_dep)
+        if self.rank == 0:
+            # Create tallies for depleting regions
+            tally_ind = 1
+            mat_filter_dep = openmc.MaterialFilter([int(id) for id in self.mat_tally_ind])
+            tallies_file = openmc.Tallies()
 
-        tally_dep.filters.append(mat_filter_dep)
-        tallies_file.export_to_xml()
+            # For each reaction in the chain, for each nuclide, and for each
+            # cell, make a tally
+            tally_dep = openmc.Tally(tally_id=tally_ind)
+            for key in nuc_list:
+                if key in self.chain.nuclide_dict:
+                    tally_dep.nuclides.append(key)
 
-    def depletion_matrix_list(self):
-        """ Generates a list containing the depletion operators.
+            for reaction in self.chain.react_to_ind:
+                tally_dep.scores.append(reaction)
 
-        Returns a list of sparse (CSR) matrices containing the depletion
-        operators for this problem.  It is done in parallel using the
-        concurrent futures package.
+            tallies_file.append(tally_dep)
 
-        Returns
-        -------
-        list of scipy.sparse.csr_matrix
-            A list of sparse depletion matrices.
-
-        Todo
-        ----
-            Generalize method away from process parallelism.
-        """
-
-        n_mat = len(self.burn_mat_to_ind)
-
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            matrices = executor.map(matrix_wrapper, zip(
-                repeat(self.chain, n_mat), self.reaction_rates.rates))
-
-        return list(matrices)
+            tally_dep.filters.append(mat_filter_dep)
+            tallies_file.export_to_xml()
 
     def total_density_list(self):
         """ Returns a list of total density lists.
@@ -577,9 +801,13 @@ class OpenMCOperator(Operator):
 
         self.reaction_rates[:, :, :] = 0.0
 
-        file = h5py.File(filename, "r")
+        file = h5py.File(filename, "r", driver='mpio', comm=self.comm)
 
         k_combined = file["k_combined"][0]
+
+        # Extract tally bins
+        materials_int = file["tallies/tally 1/filter 1/bins"].value
+        materials = [str(mat) for mat in materials_int]
 
         nuclides_binary = file["tallies/tally 1/nuclides"].value
         nuclides = [nuc.decode('utf8') for nuc in nuclides_binary]
@@ -587,7 +815,7 @@ class OpenMCOperator(Operator):
         reactions_binary = file["tallies/tally 1/score_bins"].value
         reactions = [react.decode('utf8') for react in reactions_binary]
 
-        # Get fast map
+        # Form fast map
         nuc_ind = [self.reaction_rates.nuc_to_ind[nuc] for nuc in nuclides]
         react_ind = [self.reaction_rates.react_to_ind[react] for react in reactions]
 
@@ -610,8 +838,11 @@ class OpenMCOperator(Operator):
 
         # Extract results
         for i, mat in enumerate(self.number.burn_mat_list):
+            # Get tally index
+            slab = materials.index(mat)
+
             # Get material results hyperslab
-            results = file["tallies/tally 1/results"][i, :, 0]
+            results = file["tallies/tally 1/results"][slab, :, 0]
 
             results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
             number = np.zeros(self.reaction_rates.n_nuc)
@@ -634,6 +865,20 @@ class OpenMCOperator(Operator):
                         results_expanded[i_nuc_results, react] /= number[i_nuc_results]
 
             self.reaction_rates.rates[i, :, :] = results_expanded
+
+        # Communicate power between nodes
+        if self.rank == 0:
+            power_array = np.zeros(self.size)
+            power_array[0] = power
+
+            for i in range(1, self.size):
+                power_array[i] = self.comm.recv(source=i, tag=i)
+
+            power = np.sum(power_array)
+        else:
+            self.comm.send(power, dest=0, tag=self.rank)
+
+        power = self.comm.bcast(power, root=0)
 
         self.reaction_rates[:, :, :] *= (self.settings.power / power)
 
@@ -692,20 +937,34 @@ class OpenMCOperator(Operator):
 
         Returns
         -------
-        volume : list of float
-            Volumes corresponding to materials in burn_list
+        volume : dict of str float
+            Volumes corresponding to materials in full_burn_dict
         nuc_list : list of str
             A list of all nuclide names. Used for sorting the simulation.
         burn_list : list of int
             A list of all cell IDs to be burned.  Used for sorting the simulation.
+        full_burn_dict : OrderedDict of str to int
+            Maps cell name to index in global geometry.
         """
 
         nuc_list = self.number.burn_nuc_list
         burn_list = self.number.burn_mat_list
 
-        volume = self.number.volume[0:self.number.n_mat_burn]
+        volume = {}
+        for i, mat in enumerate(burn_list):
+            volume[mat] = self.number.volume[i]
 
-        return volume, nuc_list, burn_list
+        if self.rank == 0:
+            for i in range(1, self.size):
+                volume_new = self.comm.recv(source=i, tag=i)
+                for mat, vol in volume_new.items():
+                    volume[mat] = vol
+        else:
+            self.comm.send(volume, dest=0, tag=self.rank)
+
+        volume = self.comm.bcast(volume, root=0)
+
+        return volume, nuc_list, burn_list, self.mat_tally_ind
 
 def density_to_mat(dens_dict):
     """ Generates an OpenMC material from a cell ID and self.number_density.
@@ -732,3 +991,43 @@ def clean_up_openmc():
     openmc.reset_auto_surface_id()
     openmc.reset_auto_cell_id()
     openmc.reset_auto_universe_id()
+
+def lomem_num_instances(geometry):
+    """ Gets number of instances without running out of RAM.
+
+    OpenMC.determine_paths() fills each material with a large array of strings.
+    To avoid this, only one rank will perform it and communicate the results
+    to other ranks.  It will then delete the strings.
+
+    Parameters
+    ----------
+    geometry - OpenMC geometry
+        The geometry to extract num_instances
+
+    Returns
+    -------
+    num_instances - OrderedDict of str to int
+        Number of instances for each cell.
+    """
+
+    comm = MPI.COMM_WORLD
+
+    num_instances = []
+
+    if comm.rank == 0:
+        # Perform determine_paths, save result, clear strings.
+        geometry.determine_paths()
+
+        cells = geometry.get_all_cells()
+        num_instances = OrderedDict()
+
+        for cell in cells:
+            num_instances[cell] = cells[cell].num_instances
+
+        for cell in cells:
+            cells[cell]._paths = []
+            cells[cell].fill._paths = []
+
+    num_instances = comm.bcast(num_instances, root=0)
+
+    return num_instances

@@ -66,8 +66,6 @@ class Operator(metaclass=ABCMeta):
 
         Returns
         -------
-        mat : list of scipy.sparse.csr_matrix
-            Matrices for the next step.
         k : float
             Eigenvalue of the problem.
         rates : ReactionRates
@@ -90,6 +88,30 @@ class Operator(metaclass=ABCMeta):
             A list of all nuclide names. Used for sorting the simulation.
         burn_list : list of int
             A list of all cell IDs to be burned.  Used for sorting the simulation.
+        full_burn_list : list of int
+            All burnable materials in the geometry.
+        """
+
+        pass
+
+    @abstractmethod
+    def form_matrix(self, y, mat):
+        """ Forms the f(y) matrix in y' = f(y)y.
+
+        Nominally a depletion matrix, this is abstracted on the off chance
+        that the function f has nothing to do with depletion at all.
+
+        Parameters
+        ----------
+        y : numpy.ndarray
+            An array representing y.
+        mat : int
+            Material id.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Sparse matrix representing f(y).
         """
 
         pass

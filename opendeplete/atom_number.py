@@ -57,8 +57,9 @@ class AtomNumber(object):
         self.volume = np.ones(self.n_mat)
 
         for mat in volume:
-            ind = self.mat_to_ind[str(mat)]
-            self.volume[ind] = volume[mat]
+            if str(mat) in self.mat_to_ind:
+                ind = self.mat_to_ind[str(mat)]
+                self.volume[ind] = volume[mat]
 
         self.n_mat_burn = n_mat_burn
         self.n_nuc_burn = n_nuc_burn
