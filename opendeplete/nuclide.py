@@ -61,8 +61,8 @@ class Nuclide(object):
         self.yield_energies = []
 
     @property
-    def n_decay_paths(self):
-        """Number of decay pathways."""
+    def n_decay_modes(self):
+        """Number of decay modes."""
         return len(self.decay_modes)
 
     @property

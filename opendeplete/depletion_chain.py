@@ -395,7 +395,7 @@ class DepletionChain(object):
 
         for i, nuc in enumerate(self.nuclides):
 
-            if nuc.n_decay_paths != 0:
+            if nuc.n_decay_modes != 0:
                 # Decay paths
                 # Loss
                 decay_constant = math.log(2) / nuc.half_life

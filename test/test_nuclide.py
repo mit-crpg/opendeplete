@@ -9,21 +9,29 @@ from opendeplete import nuclide
 class TestNuclide(unittest.TestCase):
     """ Tests for the nuclide class. """
 
-    def test_n_decay_paths(self):
-        """ Test the decay path count parameter. """
+    def test_n_decay_modes(self):
+        """ Test the decay mode count parameter. """
 
         nuc = nuclide.Nuclide()
 
-        nuc.decay_target = ["a", "b", "c"]
+        nuc.decay_modes = [
+            nuclide.DecayTuple("beta1", "a", 0.5),
+            nuclide.DecayTuple("beta2", "b", 0.3),
+            nuclide.DecayTuple("beta3", "c", 0.2)
+        ]
 
-        self.assertEqual(nuc.n_decay_paths, 3)
+        self.assertEqual(nuc.n_decay_modes, 3)
 
     def test_n_reaction_paths(self):
         """ Test the reaction path count parameter. """
 
         nuc = nuclide.Nuclide()
 
-        nuc.reaction_target = ["a", "b", "c"]
+        nuc.reactions = [
+            nuclide.ReactionTuple("(n,2n)", "a", 0.0, 1.0),
+            nuclide.ReactionTuple("(n,3n)", "b", 0.0, 1.0),
+            nuclide.ReactionTuple("(n,4n)", "c", 0.0, 1.0)
+        ]
 
         self.assertEqual(nuc.n_reaction_paths, 3)
 
@@ -52,14 +60,17 @@ class TestNuclide(unittest.TestCase):
         element = ET.fromstring(data)
         u235 = nuclide.Nuclide.xml_read(element)
 
-        self.assertEqual(u235.decay_type, ['sf', 'alpha'])
-        self.assertEqual(u235.decay_target, ['U235', 'Th231'])
-        self.assertEqual(u235.branching_ratio, [7.2e-11, 1 - 7.2e-11])
-        self.assertEqual(u235.reaction_type, ['(n,2n)', '(n,3n)', '(n,4n)',
-                                              '(n,gamma)', 'fission'])
-        self.assertEqual(u235.reaction_target, ['U234', 'U233', 'U232', 'U236', None])
-        self.assertEqual(u235.reaction_Q, [-5297781.0, -12142300.0, -17885600.0,
-                                           6545200.0, 193405400.0])
+        self.assertEqual(u235.decay_modes, [
+            nuclide.DecayTuple('sf', 'U235', 7.2e-11),
+            nuclide.DecayTuple('alpha', 'Th231', 1 - 7.2e-11)
+        ])
+        self.assertEqual(u235.reactions, [
+            nuclide.ReactionTuple('(n,2n)', 'U234', -5297781.0, 1.0),
+            nuclide.ReactionTuple('(n,3n)', 'U233', -12142300.0, 1.0),
+            nuclide.ReactionTuple('(n,4n)', 'U232', -17885600.0, 1.0),
+            nuclide.ReactionTuple('(n,gamma)', 'U236', 6545200.0, 1.0),
+            nuclide.ReactionTuple('fission', None, 193405400.0, 1.0),
+        ])
         self.assertEqual(u235.yield_energies, [0.0253])
         self.assertEqual(u235.yield_data, {
             0.0253: [('Te134', 0.062155), ('Zr100', 0.0497641),
@@ -72,12 +83,14 @@ class TestNuclide(unittest.TestCase):
         C = nuclide.Nuclide()
         C.name = "C"
         C.half_life = 0.123
-        C.decay_type = ["beta-", "alpha"]
-        C.decay_target = ["B", "D"]
-        C.branching_ratio = [0.99, 0.01]
-        C.reaction_target = [None, "A"]
-        C.reaction_type = ["fission", "(n,gamma)"]
-        C.reaction_Q = [2.0e8, 0.0]
+        C.decay_modes = [
+            nuclide.DecayTuple('beta-', 'B', 0.99),
+            nuclide.DecayTuple('alpha', 'D', 0.01)
+        ]
+        C.reactions = [
+            nuclide.ReactionTuple('fission', None, 2.0e8, 1.0),
+            nuclide.ReactionTuple('(n,gamma)', 'A', 0.0, 1.0)
+        ]
         C.yield_energies = [0.0253]
         C.yield_data = {0.0253: [("A", 0.0292737), ("B", 0.002566345)]}
         element = C.xml_write()
