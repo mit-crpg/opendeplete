@@ -9,7 +9,7 @@ except ImportError:
 
 kwargs = {'name': 'opendeplete',
           'version': '0.1',
-          'packages': ['opendeplete'],
+          'packages': ['opendeplete', 'opendeplete.integrator'],
           'scripts': [],
 
           # Metadata
