@@ -726,7 +726,8 @@ class OpenMCOperator(Operator):
         if self.rank == 0:
             # Create tallies for depleting regions
             tally_ind = 1
-            mat_filter_dep = openmc.MaterialFilter([int(id) for id in self.mat_tally_ind])
+            mat_filter_dep = openmc.MaterialFilter(
+                [int(i) for i in self.mat_tally_ind], filter_id=1)
             tallies_file = openmc.Tallies()
 
             # For each reaction in the chain, for each nuclide, and for each
@@ -806,7 +807,7 @@ class OpenMCOperator(Operator):
         k_combined = file["k_combined"][0]
 
         # Extract tally bins
-        materials_int = file["tallies/tally 1/filter 1/bins"].value
+        materials_int = file["tallies/filters/filter 1/bins"].value
         materials = [str(mat) for mat in materials_int]
 
         nuclides_binary = file["tallies/tally 1/nuclides"].value
