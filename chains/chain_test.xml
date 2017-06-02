@@ -8,9 +8,10 @@
     <decay_type type="beta" target="A" branching_ratio="1.0"/>
     <reaction_type type="(n,gamma)" Q="0.0" target="C"/>
   </nuclide_table>
-  <nuclide_table name="C" reactions="2">
+  <nuclide_table name="C" reactions="3">
     <reaction_type type="fission" Q="200000000.0"/>
-    <reaction_type type="(n,gamma)" Q="0.0" target="A"/>
+    <reaction_type type="(n,gamma)" Q="0.0" target="A" branching_ratio="0.7"/>
+    <reaction_type type="(n,gamma)" Q="0.0" target="B" branching_ratio="0.3"/>
     <neutron_fission_yields>
       <energies>0.0253</energies>
       <fission_yields energy="0.0253">

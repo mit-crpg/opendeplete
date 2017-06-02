@@ -81,9 +81,10 @@ class TestDepletionChain(unittest.TestCase):
 
         self.assertEqual(nuc.name, "C")
         self.assertEqual(nuc.n_decay_modes, 0)
-        self.assertEqual(nuc.n_reaction_paths, 2)
-        self.assertEqual([r.target for r in nuc.reactions], [None, "A"])
-        self.assertEqual([r.type for r in nuc.reactions], ["fission", "(n,gamma)"])
+        self.assertEqual(nuc.n_reaction_paths, 3)
+        self.assertEqual([r.target for r in nuc.reactions], [None, "A", "B"])
+        self.assertEqual([r.type for r in nuc.reactions], ["fission", "(n,gamma)", "(n,gamma)"])
+        self.assertEqual([r.branching_ratio for r in nuc.reactions], [1.0, 0.7, 0.3])
 
         # Yield tests
         self.assertEqual(nuc.yield_energies, [0.0253])
@@ -116,7 +117,8 @@ class TestDepletionChain(unittest.TestCase):
         C.name = "C"
         C.reactions = [
             nuclide.ReactionTuple("fission", None, 2.0e8, 1.0),
-            nuclide.ReactionTuple("(n,gamma)", "A", 0.0, 1.0)
+            nuclide.ReactionTuple("(n,gamma)", "A", 0.0, 0.7),
+            nuclide.ReactionTuple("(n,gamma)", "B", 0.0, 0.3)
         ]
         C.yield_energies = [0.0253]
         C.yield_data = {0.0253: [("A", 0.0292737), ("B", 0.002566345)]}
@@ -166,9 +168,9 @@ class TestDepletionChain(unittest.TestCase):
         mat21 = 3
 
         # C -> A fission, (n, gamma)
-        mat02 = 0.0292737 * 1.0 + 4
-        # C -> B fission
-        mat12 = 0.002566345 * 1.0
+        mat02 = 0.0292737 * 1.0 + 4.0 * 0.7
+        # C -> B fission, (n, gamma)
+        mat12 = 0.002566345 * 1.0 + 4.0 * 0.3
         # Loss C, fission, (n, gamma)
         mat22 = -1.0 - 4.0
 
