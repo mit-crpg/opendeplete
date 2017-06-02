@@ -51,35 +51,40 @@ class TestDepletionChain(unittest.TestCase):
 
         self.assertEqual(nuc.name, "A")
         self.assertEqual(nuc.half_life, 2.36520E+04)
-        self.assertEqual(nuc.n_decay_paths, 2)
-        self.assertEqual(nuc.decay_target, ["B", "C"])
-        self.assertEqual(nuc.decay_type, ["beta1", "beta2"])
-        self.assertEqual(nuc.branching_ratio, [0.6, 0.4])
+        self.assertEqual(nuc.n_decay_modes, 2)
+        modes = nuc.decay_modes
+        self.assertEqual([m.target for m in modes], ["B", "C"])
+        self.assertEqual([m.type for m in modes], ["beta1", "beta2"])
+        self.assertEqual([m.branching_ratio for m in modes], [0.6, 0.4])
         self.assertEqual(nuc.n_reaction_paths, 1)
-        self.assertEqual(nuc.reaction_target, ["C"])
-        self.assertEqual(nuc.reaction_type, ["(n,gamma)"])
+        self.assertEqual([r.target for r in nuc.reactions], ["C"])
+        self.assertEqual([r.type for r in nuc.reactions], ["(n,gamma)"])
+        self.assertEqual([r.branching_ratio for r in nuc.reactions], [1.0])
 
         # B tests
         nuc = dep.nuclides[dep.nuclide_dict["B"]]
 
         self.assertEqual(nuc.name, "B")
         self.assertEqual(nuc.half_life, 3.29040E+04)
-        self.assertEqual(nuc.n_decay_paths, 1)
-        self.assertEqual(nuc.decay_target, ["A"])
-        self.assertEqual(nuc.decay_type, ["beta"])
-        self.assertEqual(nuc.branching_ratio, [1.0])
+        self.assertEqual(nuc.n_decay_modes, 1)
+        modes = nuc.decay_modes
+        self.assertEqual([m.target for m in modes], ["A"])
+        self.assertEqual([m.type for m in modes], ["beta"])
+        self.assertEqual([m.branching_ratio for m in modes], [1.0])
         self.assertEqual(nuc.n_reaction_paths, 1)
-        self.assertEqual(nuc.reaction_target, ["C"])
-        self.assertEqual(nuc.reaction_type, ["(n,gamma)"])
+        self.assertEqual([r.target for r in nuc.reactions], ["C"])
+        self.assertEqual([r.type for r in nuc.reactions], ["(n,gamma)"])
+        self.assertEqual([r.branching_ratio for r in nuc.reactions], [1.0])
 
         # C tests
         nuc = dep.nuclides[dep.nuclide_dict["C"]]
 
         self.assertEqual(nuc.name, "C")
-        self.assertEqual(nuc.n_decay_paths, 0)
-        self.assertEqual(nuc.n_reaction_paths, 2)
-        self.assertEqual(nuc.reaction_target, [None, "A"])
-        self.assertEqual(nuc.reaction_type, ["fission", "(n,gamma)"])
+        self.assertEqual(nuc.n_decay_modes, 0)
+        self.assertEqual(nuc.n_reaction_paths, 3)
+        self.assertEqual([r.target for r in nuc.reactions], [None, "A", "B"])
+        self.assertEqual([r.type for r in nuc.reactions], ["fission", "(n,gamma)", "(n,gamma)"])
+        self.assertEqual([r.branching_ratio for r in nuc.reactions], [1.0, 0.7, 0.3])
 
         # Yield tests
         self.assertEqual(nuc.yield_energies, [0.0253])
@@ -96,28 +101,25 @@ class TestDepletionChain(unittest.TestCase):
         A = nuclide.Nuclide()
         A.name = "A"
         A.half_life = 2.36520e4
-        A.decay_target = ["B", "C"]
-        A.decay_type = ["beta1", "beta2"]
-        A.branching_ratio = [0.6, 0.4]
-        A.reaction_target = ["C"]
-        A.reaction_type = ["(n,gamma)"]
-        A.reaction_Q = [0.0]
+        A.decay_modes = [
+            nuclide.DecayTuple("beta1", "B", 0.6),
+            nuclide.DecayTuple("beta2", "C", 0.4)
+        ]
+        A.reactions = [nuclide.ReactionTuple("(n,gamma)", "C", 0.0, 1.0)]
 
         B = nuclide.Nuclide()
         B.name = "B"
         B.half_life = 3.29040e4
-        B.decay_target = ["A"]
-        B.decay_type = ["beta", ]
-        B.branching_ratio = [1.0]
-        B.reaction_target = ["C"]
-        B.reaction_type = ["(n,gamma)"]
-        B.reaction_Q = [0.0]
+        B.decay_modes = [nuclide.DecayTuple("beta", "A", 1.0)]
+        B.reactions = [nuclide.ReactionTuple("(n,gamma)", "C", 0.0, 1.0)]
 
         C = nuclide.Nuclide()
         C.name = "C"
-        C.reaction_target = [None, "A"]
-        C.reaction_type = ["fission", "(n,gamma)"]
-        C.reaction_Q = [2.0e8, 0.0]
+        C.reactions = [
+            nuclide.ReactionTuple("fission", None, 2.0e8, 1.0),
+            nuclide.ReactionTuple("(n,gamma)", "A", 0.0, 0.7),
+            nuclide.ReactionTuple("(n,gamma)", "B", 0.0, 0.3)
+        ]
         C.yield_energies = [0.0253]
         C.yield_data = {0.0253: [("A", 0.0292737), ("B", 0.002566345)]}
 
@@ -166,9 +168,9 @@ class TestDepletionChain(unittest.TestCase):
         mat21 = 3
 
         # C -> A fission, (n, gamma)
-        mat02 = 0.0292737 * 1.0 + 4
-        # C -> B fission
-        mat12 = 0.002566345 * 1.0
+        mat02 = 0.0292737 * 1.0 + 4.0 * 0.7
+        # C -> B fission, (n, gamma)
+        mat12 = 0.002566345 * 1.0 + 4.0 * 0.3
         # Loss C, fission, (n, gamma)
         mat22 = -1.0 - 4.0
 

@@ -3,14 +3,18 @@
 Contains the per-nuclide components of a depletion chain.
 """
 
+from collections import namedtuple
 try:
     import lxml.etree as ET
 except ImportError:
     import xml.etree.ElementTree as ET
 
+DecayTuple = namedtuple('DecayTuple', 'type target branching_ratio')
+ReactionTuple = namedtuple('ReactionTuple', 'type target Q branching_ratio')
+
 
 class Nuclide(object):
-    """ The Nuclide class.
+    """The Nuclide class.
 
     Contains everything in a depletion chain relating to a single nuclide.
 
@@ -22,22 +26,16 @@ class Nuclide(object):
         Half life of nuclide in s^-1.
     decay_energy : float
         Energy deposited from decay in eV.
-    n_decay_paths : int
+    n_decay_modes : int
         Number of decay pathways.
-    decay_target : list of str
-        Names of targets nuclide can decay to.
-    decay_type : list of str
-        Name of each decay mode
-    branching_ratio : list of float
-        Branching ratio for each target.
+    decay_modes : list of DecayTuple
+        Decay mode information. Each element of the list is a named tuple with
+        attributes 'type', 'target', and 'branching_ratio'.
     n_reaction_paths : int
         Number of possible reaction pathways.
-    reaction_target : list of str
-        List of names of targets of reactions.
-    reaction_type : list of str
-        List of names of reactions.
-    reaction_Q : list of float
-        List of Q values in eV of reactions.
+    reactions : list of ReactionTuple
+        Reaction information. Each element of the list is a named tuple with
+        attribute 'type', 'target', 'Q', and 'branching_ratio'.
     yield_data : dict of float to list
         Maps tabulated energy to list of (product, yield) for all
         neutron-induced fission products.
@@ -53,28 +51,24 @@ class Nuclide(object):
         self.decay_energy = 0.0
 
         # Decay paths
-        self.decay_target = []
-        self.decay_type = []
-        self.branching_ratio = []
+        self.decay_modes = []
 
-        # Reaction paths and rates
-        self.reaction_target = []
-        self.reaction_type = []
-        self.reaction_Q = []
+        # Reaction paths
+        self.reactions = []
 
         # Neutron fission yields, if present
         self.yield_data = {}
         self.yield_energies = []
 
     @property
-    def n_decay_paths(self):
-        """Number of decay pathways."""
-        return len(self.decay_target)
+    def n_decay_modes(self):
+        """Number of decay modes."""
+        return len(self.decay_modes)
 
     @property
     def n_reaction_paths(self):
         """Number of possible reaction pathways."""
-        return len(self.reaction_target)
+        return len(self.reactions)
 
     @classmethod
     def xml_read(cls, element):
@@ -101,24 +95,27 @@ class Nuclide(object):
 
         # Check for decay paths
         for decay_elem in element.iter('decay_type'):
-            nuc.decay_target.append(decay_elem.get('target'))
-            nuc.decay_type.append(decay_elem.get('type'))
-            nuc.branching_ratio.append(
-                float(decay_elem.get('branching_ratio')))
+            d_type = decay_elem.get('type')
+            target = decay_elem.get('target')
+            branching_ratio = float(decay_elem.get('branching_ratio'))
+            nuc.decay_modes.append(DecayTuple(d_type, target, branching_ratio))
 
         # Check for reaction paths
         for reaction_elem in element.iter('reaction_type'):
             r_type = reaction_elem.get('type')
-            nuc.reaction_type.append(r_type)
-            nuc.reaction_Q.append(float(reaction_elem.get('Q', '0')))
+            Q = float(reaction_elem.get('Q', '0'))
+            branching_ratio = float(reaction_elem.get('branching_ratio', '1'))
 
             # If the type is not fission, get target and Q value, otherwise
             # just set null values
             if r_type != 'fission':
-                nuc.reaction_target.append(reaction_elem.get('target'))
+                target = reaction_elem.get('target')
             else:
-                nuc.reaction_target.append(None)
+                target = None
 
+            # Append reaction
+            nuc.reactions.append(ReactionTuple(
+                r_type, target, Q, branching_ratio))
 
         fpy_elem = element.find('neutron_fission_yields')
         if fpy_elem is not None:
@@ -146,23 +143,23 @@ class Nuclide(object):
 
         if self.half_life is not None:
             elem.set('half_life', str(self.half_life))
-            elem.set('decay_modes', str(len(self.decay_type)))
+            elem.set('decay_modes', str(len(self.decay_modes)))
             elem.set('decay_energy', str(self.decay_energy))
-            for mode, daughter, br in zip(self.decay_type, self.decay_target,
-                                          self.branching_ratio):
+            for mode, daughter, br in self.decay_modes:
                 mode_elem = ET.SubElement(elem, 'decay_type')
                 mode_elem.set('type', mode)
                 mode_elem.set('target', daughter)
                 mode_elem.set('branching_ratio', str(br))
 
-        elem.set('reactions', str(len(self.reaction_type)))
-        for rx, daughter, Q in zip(self.reaction_type, self.reaction_target,
-                                   self.reaction_Q):
+        elem.set('reactions', str(len(self.reactions)))
+        for rx, daughter, Q, br in self.reactions:
             rx_elem = ET.SubElement(elem, 'reaction_type')
             rx_elem.set('type', rx)
             rx_elem.set('Q', str(Q))
             if rx != 'fission':
                 rx_elem.set('target', daughter)
+            if br != 1.0:
+                rx_elem.set('branching_ratio', str(br))
 
         if self.yield_data:
             fpy_elem = ET.SubElement(elem, 'neutron_fission_yields')
