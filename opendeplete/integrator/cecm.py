@@ -48,7 +48,7 @@ def cecm(operator, print_out=True):
 
     for i, dt in enumerate(operator.settings.dt_vec):
         # Create vectors
-        x = [copy.copy(vec)]
+        x = [copy.deepcopy(vec)]
         seeds = []
         eigvls = []
         rates_array = []
@@ -106,7 +106,7 @@ def cecm(operator, print_out=True):
         vec = copy.deepcopy(x_result)
 
     # Perform one last simulation
-    x = [copy.copy(vec)]
+    x = [copy.deepcopy(vec)]
     seeds = []
     eigvls = []
     rates_array = []

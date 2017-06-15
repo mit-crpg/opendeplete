@@ -324,7 +324,7 @@ class OpenMCOperator(Operator):
         nuc_set = sorted(list(nuc_set))
 
         # Construct a global nuclide dictionary, burned first
-        nuc_dict = copy.copy(self.chain.nuclide_dict)
+        nuc_dict = copy.deepcopy(self.chain.nuclide_dict)
 
         i = len(nuc_dict)
 

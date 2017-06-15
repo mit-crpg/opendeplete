@@ -81,10 +81,10 @@ class Results(object):
             Number of stages in simulation.
         """
 
-        self.volume = copy.copy(volume)
+        self.volume = copy.deepcopy(volume)
         self.nuc_to_ind = OrderedDict()
         self.mat_to_ind = OrderedDict()
-        self.mat_to_hdf5_ind = copy.copy(full_burn_dict)
+        self.mat_to_hdf5_ind = copy.deepcopy(full_burn_dict)
 
         for i, mat in enumerate(burn_list):
             self.mat_to_ind[mat] = i
