@@ -61,6 +61,10 @@ class OpenMCSettings(Settings):
         Coordinate of upper right of bounding box of geometry.
     entropy_dimension : list of int
         Grid size of entropy.
+    dilute_initial : float, default 1.0e3
+        Initial atom density to add for nuclides that are zero in initial
+        condition to ensure they exist in the decay chain.  Only done for
+        nuclides with reaction rates.
     round_number : bool
         Whether or not to round output to OpenMC to 8 digits.
         Useful in testing, as OpenMC is incredibly sensitive to exact values.
@@ -85,6 +89,7 @@ class OpenMCSettings(Settings):
         self.lower_left = None
         self.upper_right = None
         self.entropy_dimension = None
+        self.dilute_initial = 1.0e3
 
         # OpenMC testing specific
         self.round_number = False
@@ -250,11 +255,11 @@ class OpenMCOperator(Operator):
         volume = self.comm.bcast(volume, root=0)
         self.mat_tally_ind = self.comm.bcast(self.mat_tally_ind, root=0)
 
-        # Extract number densities from the geometry
-        self.extract_number(mat_burn, mat_not_burn, volume, nuc_dict)
-
         # Load participating nuclides
         self.load_participating()
+
+        # Extract number densities from the geometry
+        self.extract_number(mat_burn, mat_not_burn, volume, nuc_dict)
 
         # Create reaction rate tables
         self.initialize_reaction_rates()
@@ -398,6 +403,10 @@ class OpenMCOperator(Operator):
         n_nuc_burn = len(self.chain.nuclide_dict)
 
         self.number = AtomNumber(mat_dict, nuc_dict, volume, n_mat_burn, n_nuc_burn)
+
+        if self.settings.dilute_initial != 0.0:
+            for nuc in self.burn_nuc_to_ind:
+                self.number.set_atom_density(np.s_[:], nuc, self.settings.dilute_initial)
 
         self.materials = [None] * self.number.n_mat
 
