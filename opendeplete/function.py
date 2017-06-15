@@ -15,8 +15,6 @@ class Settings(object):
     ----------
     dt_vec : numpy.array
         Array of time steps to take.
-    tol : float
-        Tolerance for adaptive time stepping.
     output_dir : str
         Path to output directory to save results.
     """
@@ -24,7 +22,6 @@ class Settings(object):
     def __init__(self):
         # Integrator specific
         self.dt_vec = None
-        self.tol = None
         self.output_dir = None
 
 class Operator(metaclass=ABCMeta):

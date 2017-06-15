@@ -19,6 +19,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../../opendeplete/'))
 
 # -- General configuration ------------------------------------------------
 
@@ -56,7 +57,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'opendeplete'
-copyright = '2015-2016, Massachusetts Institute of Technology'
+copyright = '2016-2017, Massachusetts Institute of Technology'
 author = 'Colin Josey'
 
 # The version info for the project you're documenting, acts as replacement for

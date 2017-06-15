@@ -2,17 +2,15 @@
 OpenDeplete: A Depletion Front-End
 ==================================
 
-Contents:
+.. only:: html
+
+    --------
+    Contents
+    --------
 
 .. toctree::
-   :maxdepth: 2
-
-   api/index
-
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+    :maxdepth: 1
+    
+    installation
+    api/index
+    

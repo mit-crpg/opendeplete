@@ -1,16 +1,4 @@
-""" The CE/CM integrator.
-
-Implements the CE/CM Predictor-Corrector algorithm.
-
-This algorithm is mathematically defined as:
-
-.. math:
-    y' = A(y, t) y(t)
-    A_p = A(y_n, t_n)
-    y_m = expm(A_p h/2) y_n
-    A_c = A(y_m, t_n + h/2)
-    y_{n+1} = expm(A_c h) y_n
-"""
+""" The CE/CM integrator."""
 
 import copy
 import os
@@ -22,7 +10,26 @@ from .cram import CRAM48
 from .save_results import save_results
 
 def cecm(operator, print_out=True):
-    """ Performs integration of an operator using the CECM pc algorithm.
+    """The CE/CM integrator.
+
+    Implements the second order CE/CM Predictor-Corrector algorithm [ref]_.
+    This algorithm is mathematically defined as:
+
+    .. math::
+        y' &= A(y, t) y(t)
+
+        A_p &= A(y_n, t_n)
+
+        y_m &= \\text{expm}(A_p h/2) y_n
+
+        A_c &= A(y_m, t_n + h/2)
+
+        y_{n+1} &= \\text{expm}(A_c h) y_n
+
+    .. [ref] 
+        Isotalo, Aarno. "Comparison of Neutronics-Depletion Coupling Schemes
+        for Burnup Calculations—Continued Study." Nuclear Science and
+        Engineering 180.3 (2015): 286-300.
 
     Parameters
     ----------

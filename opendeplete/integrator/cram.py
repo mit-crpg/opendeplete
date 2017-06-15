@@ -1,12 +1,6 @@
 """ Chebyshev Rational Approximation Method module
 
 Implements two different forms of CRAM for use in opendeplete.
-
-From
-----
-    Pusa, Maria. "Higher-Order Chebyshev Rational Approximation Method and
-    Application to Burnup Equations." Nuclear Science and Engineering 182.3
-    (2016).
 """
 
 import numpy as np
@@ -17,7 +11,13 @@ def CRAM16(A, n0, dt):
     """ Chebyshev Rational Approximation Method, order 16
 
     Algorithm is the 16th order Chebyshev Rational Approximation Method,
-    implemented in the more stable incomplete partial fraction (IPF) form.
+    implemented in the more stable incomplete partial fraction (IPF) form
+    [cram16]_.
+
+    .. [cram16]
+        Pusa, Maria. "Higher-Order Chebyshev Rational Approximation Method and
+        Application to Burnup Equations." Nuclear Science and Engineering 182.3
+        (2016).
 
     Parameters
     ----------
@@ -73,7 +73,13 @@ def CRAM48(A, n0, dt):
     """ Chebyshev Rational Approximation Method, order 48
 
     Algorithm is the 48th order Chebyshev Rational Approximation Method,
-    implemented in the more stable incomplete partial fraction (IPF) form.
+    implemented in the more stable incomplete partial fraction (IPF) form
+    [cram48]_.
+
+    .. [cram48]
+        Pusa, Maria. "Higher-Order Chebyshev Rational Approximation Method and
+        Application to Burnup Equations." Nuclear Science and Engineering 182.3
+        (2016).
 
     Parameters
     ----------
