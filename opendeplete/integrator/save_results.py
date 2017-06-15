@@ -43,4 +43,4 @@ def save_results(op, x, rates, eigvls, seeds, t, step_ind):
     results.time = t
     results.rates = rates
 
-    write_results(results, "results", step_ind)
+    write_results(results, "results.h5", step_ind)

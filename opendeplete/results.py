@@ -402,15 +402,15 @@ def write_results(result, filename, index):
     result : Results
         Object to be stored in a file.
     filename : String
-        Target filename, without extension.
+        Target filename.
     index : int
         What step is this?
     """
 
     if index == 0:
-        file = h5py.File(filename + ".h5", "w", driver='mpio', comm=MPI.COMM_WORLD)
+        file = h5py.File(filename, "w", driver='mpio', comm=MPI.COMM_WORLD)
     else:
-        file = h5py.File(filename + ".h5", "a", driver='mpio', comm=MPI.COMM_WORLD)
+        file = h5py.File(filename, "a", driver='mpio', comm=MPI.COMM_WORLD)
 
     result.to_hdf5(file, index)
 
@@ -423,7 +423,7 @@ def read_results(filename):
     Parameters
     ----------
     filename : str
-        The filename to read from, without extension.
+        The filename to read from.
 
     Returns
     -------
@@ -431,7 +431,7 @@ def read_results(filename):
         The result objects.
     """
 
-    file = h5py.File(filename + ".h5", "r")
+    file = h5py.File(filename, "r")
 
     assert file["/version"].value == RESULTS_VERSION
 

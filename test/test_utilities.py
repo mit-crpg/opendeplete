@@ -18,7 +18,7 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
         x, y = utilities.evaluate_single_nuclide(res, "10000", "Xe135")
 
@@ -34,7 +34,7 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
         x, y = utilities.evaluate_reaction_rate(res, "10000", "Xe135", "(n,gamma)")
 
@@ -53,7 +53,7 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
         x, y = utilities.evaluate_eigenvalue(res)
 

@@ -11,7 +11,7 @@ from opendeplete import read_results, \
 result_folder = "test"
 
 # Load data
-results = read_results(result_folder + "/results")
+results = read_results(result_folder + "/results.h5")
 
 cell = "10004"
 nuc = "Gd157"

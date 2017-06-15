@@ -87,7 +87,7 @@ class TestIntegrator(unittest.TestCase):
         integrator.save_results(op, x2, rate2, eigvl2, seed2, t2, 1)
 
         # Load the files
-        res = results.read_results("results")
+        res = results.read_results("results.h5")
 
         for i in range(stages):
             for mat_i, mat in enumerate(burn_list):
