@@ -183,7 +183,8 @@ class Results(object):
 
         handle.create_dataset("version", data=RESULTS_VERSION)
 
-        mat_list = sorted(list(self.mat_to_hdf5_ind))
+        mat_int = sorted([int(mat) for mat in self.mat_to_hdf5_ind])
+        mat_list = [str(mat) for mat in mat_int]
         nuc_list = sorted(self.nuc_to_ind.keys())
         rxn_list = sorted(self.rates[0].react_to_ind.keys())
 

@@ -323,9 +323,13 @@ class OpenMCOperator(Operator):
         if need_vol:
             exit("Need volumes for materials: " + str(need_vol))
 
-        # Alphabetize the sets
-        mat_burn = sorted(list(mat_burn))
-        mat_not_burn = sorted(list(mat_not_burn))
+        # Sort the sets
+        mat_burn_int = sorted([int(mat) for mat in mat_burn])
+        mat_burn = [str(mat) for mat in mat_burn_int]
+
+        mat_not_burn_int = sorted([int(mat) for mat in mat_not_burn])
+        mat_not_burn = [str(mat) for mat in mat_not_burn_int]
+
         nuc_set = sorted(list(nuc_set))
 
         # Construct a global nuclide dictionary, burned first
@@ -473,6 +477,9 @@ class OpenMCOperator(Operator):
         seed : int
             Seed for this simulation.
         """
+
+        # Prevent OpenMC from complaining about re-creating tallies
+        clean_up_openmc()
 
         # Ensure the nonexistance of tallies.out, materials.xml
         if self.rank == 0:
@@ -997,10 +1004,7 @@ def density_to_mat(dens_dict):
 
 def clean_up_openmc():
     """ Resets all automatic indexing in OpenMC, as these get in the way. """
-    openmc.reset_auto_material_id()
-    openmc.reset_auto_surface_id()
-    openmc.reset_auto_cell_id()
-    openmc.reset_auto_universe_id()
+    openmc.reset_auto_ids()
 
 def lomem_num_instances(geometry):
     """ Gets number of instances without running out of RAM.

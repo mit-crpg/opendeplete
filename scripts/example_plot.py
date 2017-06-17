@@ -13,7 +13,7 @@ result_folder = "test"
 # Load data
 results = read_results(result_folder + "/results.h5")
 
-cell = "10004"
+cell = "5"
 nuc = "Gd157"
 rxn = "(n,gamma)"
 
