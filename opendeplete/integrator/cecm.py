@@ -26,7 +26,7 @@ def cecm(operator, print_out=True):
 
         y_{n+1} &= \\text{expm}(A_c h) y_n
 
-    .. [ref] 
+    .. [ref]
         Isotalo, Aarno. "Comparison of Neutronics-Depletion Coupling Schemes
         for Burnup Calculations—Continued Study." Nuclear Science and
         Engineering 180.3 (2015): 286-300.

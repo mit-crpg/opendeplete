@@ -17,10 +17,10 @@ import argparse
 
 # Tests.  Add them as they're produced.
 
-suite_normal = [
+SUITE_NORMAL = [
     "test.test_atom_number",
-    "test.test_cram",
     "test.test_cecm_regression",
+    "test.test_cram",
     "test.test_depletion_chain",
     "test.test_integrator",
     "test.test_nuclide",
@@ -29,7 +29,7 @@ suite_normal = [
     "test.test_utilities"
     ]
 
-suite_full = [
+SUITE_FULL = [
     "test.test_full"
     ]
 
@@ -39,17 +39,17 @@ def test(use_full):
     Parameters
     ----------
     use_full : bool
-        Whether or not to do tests listed in suite_full.
+        Whether or not to do tests listed in SUITE_FULL.
     """
 
     test_suite = unittest.TestSuite()
 
-    for module_test in suite_normal:
+    for module_test in SUITE_NORMAL:
         tests = unittest.defaultTestLoader.loadTestsFromName(module_test)
         test_suite.addTest(tests)
 
     if use_full:
-        for module_test in suite_full:
+        for module_test in SUITE_FULL:
             tests = unittest.defaultTestLoader.loadTestsFromName(module_test)
             test_suite.addTest(tests)
 
