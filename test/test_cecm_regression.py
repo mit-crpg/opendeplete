@@ -36,7 +36,7 @@ class TestCECMRegression(unittest.TestCase):
         opendeplete.cecm(op, print_out=False)
 
         # Load the files
-        res = results.read_results(settings.output_dir + "/results")
+        res = results.read_results(settings.output_dir + "/results.h5")
 
         _, y1 = utilities.evaluate_single_nuclide(res, "1", "1")
         _, y2 = utilities.evaluate_single_nuclide(res, "1", "2")

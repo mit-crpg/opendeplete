@@ -81,10 +81,10 @@ class Results(object):
             Number of stages in simulation.
         """
 
-        self.volume = copy.copy(volume)
+        self.volume = copy.deepcopy(volume)
         self.nuc_to_ind = OrderedDict()
         self.mat_to_ind = OrderedDict()
-        self.mat_to_hdf5_ind = copy.copy(full_burn_dict)
+        self.mat_to_hdf5_ind = copy.deepcopy(full_burn_dict)
 
         for i, mat in enumerate(burn_list):
             self.mat_to_ind[mat] = i
@@ -183,7 +183,8 @@ class Results(object):
 
         handle.create_dataset("version", data=RESULTS_VERSION)
 
-        mat_list = sorted(list(self.mat_to_hdf5_ind))
+        mat_int = sorted([int(mat) for mat in self.mat_to_hdf5_ind])
+        mat_list = [str(mat) for mat in mat_int]
         nuc_list = sorted(self.nuc_to_ind.keys())
         rxn_list = sorted(self.rates[0].react_to_ind.keys())
 
@@ -402,15 +403,15 @@ def write_results(result, filename, index):
     result : Results
         Object to be stored in a file.
     filename : String
-        Target filename, without extension.
+        Target filename.
     index : int
         What step is this?
     """
 
     if index == 0:
-        file = h5py.File(filename + ".h5", "w", driver='mpio', comm=MPI.COMM_WORLD)
+        file = h5py.File(filename, "w", driver='mpio', comm=MPI.COMM_WORLD)
     else:
-        file = h5py.File(filename + ".h5", "a", driver='mpio', comm=MPI.COMM_WORLD)
+        file = h5py.File(filename, "a", driver='mpio', comm=MPI.COMM_WORLD)
 
     result.to_hdf5(file, index)
 
@@ -423,7 +424,7 @@ def read_results(filename):
     Parameters
     ----------
     filename : str
-        The filename to read from, without extension.
+        The filename to read from.
 
     Returns
     -------
@@ -431,7 +432,7 @@ def read_results(filename):
         The result objects.
     """
 
-    file = h5py.File(filename + ".h5", "r")
+    file = h5py.File(filename, "r")
 
     assert file["/version"].value == RESULTS_VERSION
 

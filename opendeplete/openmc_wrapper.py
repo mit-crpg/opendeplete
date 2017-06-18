@@ -61,6 +61,10 @@ class OpenMCSettings(Settings):
         Coordinate of upper right of bounding box of geometry.
     entropy_dimension : list of int
         Grid size of entropy.
+    dilute_initial : float, default 1.0e3
+        Initial atom density to add for nuclides that are zero in initial
+        condition to ensure they exist in the decay chain.  Only done for
+        nuclides with reaction rates.
     round_number : bool
         Whether or not to round output to OpenMC to 8 digits.
         Useful in testing, as OpenMC is incredibly sensitive to exact values.
@@ -85,6 +89,7 @@ class OpenMCSettings(Settings):
         self.lower_left = None
         self.upper_right = None
         self.entropy_dimension = None
+        self.dilute_initial = 1.0e3
 
         # OpenMC testing specific
         self.round_number = False
@@ -250,11 +255,11 @@ class OpenMCOperator(Operator):
         volume = self.comm.bcast(volume, root=0)
         self.mat_tally_ind = self.comm.bcast(self.mat_tally_ind, root=0)
 
-        # Extract number densities from the geometry
-        self.extract_number(mat_burn, mat_not_burn, volume, nuc_dict)
-
         # Load participating nuclides
         self.load_participating()
+
+        # Extract number densities from the geometry
+        self.extract_number(mat_burn, mat_not_burn, volume, nuc_dict)
 
         # Create reaction rate tables
         self.initialize_reaction_rates()
@@ -318,13 +323,17 @@ class OpenMCOperator(Operator):
         if need_vol:
             exit("Need volumes for materials: " + str(need_vol))
 
-        # Alphabetize the sets
-        mat_burn = sorted(list(mat_burn))
-        mat_not_burn = sorted(list(mat_not_burn))
+        # Sort the sets
+        mat_burn_int = sorted([int(mat) for mat in mat_burn])
+        mat_burn = [str(mat) for mat in mat_burn_int]
+
+        mat_not_burn_int = sorted([int(mat) for mat in mat_not_burn])
+        mat_not_burn = [str(mat) for mat in mat_not_burn_int]
+
         nuc_set = sorted(list(nuc_set))
 
         # Construct a global nuclide dictionary, burned first
-        nuc_dict = copy.copy(self.chain.nuclide_dict)
+        nuc_dict = copy.deepcopy(self.chain.nuclide_dict)
 
         i = len(nuc_dict)
 
@@ -399,6 +408,10 @@ class OpenMCOperator(Operator):
 
         self.number = AtomNumber(mat_dict, nuc_dict, volume, n_mat_burn, n_nuc_burn)
 
+        if self.settings.dilute_initial != 0.0:
+            for nuc in self.burn_nuc_to_ind:
+                self.number.set_atom_density(np.s_[:], nuc, self.settings.dilute_initial)
+
         self.materials = [None] * self.number.n_mat
 
         # Now extract the number densities and store
@@ -465,6 +478,9 @@ class OpenMCOperator(Operator):
             Seed for this simulation.
         """
 
+        # Prevent OpenMC from complaining about re-creating tallies
+        clean_up_openmc()
+
         # Ensure the nonexistance of tallies.out, materials.xml
         if self.rank == 0:
             try:
@@ -527,7 +543,7 @@ class OpenMCOperator(Operator):
                 print("Time to openmc: ", time_openmc - time_start)
                 print("Time to unpack: ", time_unpack - time_openmc)
 
-        return k, self.reaction_rates, self.seed
+        return k, copy.deepcopy(self.reaction_rates), self.seed
 
     def form_matrix(self, y, mat):
         """ Forms the depletion matrix.
@@ -988,47 +1004,4 @@ def density_to_mat(dens_dict):
 
 def clean_up_openmc():
     """ Resets all automatic indexing in OpenMC, as these get in the way. """
-    openmc.reset_auto_material_id()
-    openmc.reset_auto_surface_id()
-    openmc.reset_auto_cell_id()
-    openmc.reset_auto_universe_id()
-
-def lomem_num_instances(geometry):
-    """ Gets number of instances without running out of RAM.
-
-    OpenMC.determine_paths() fills each material with a large array of strings.
-    To avoid this, only one rank will perform it and communicate the results
-    to other ranks.  It will then delete the strings.
-
-    Parameters
-    ----------
-    geometry - OpenMC geometry
-        The geometry to extract num_instances
-
-    Returns
-    -------
-    num_instances - OrderedDict of str to int
-        Number of instances for each cell.
-    """
-
-    comm = MPI.COMM_WORLD
-
-    num_instances = []
-
-    if comm.rank == 0:
-        # Perform determine_paths, save result, clear strings.
-        geometry.determine_paths()
-
-        cells = geometry.get_all_cells()
-        num_instances = OrderedDict()
-
-        for cell in cells:
-            num_instances[cell] = cells[cell].num_instances
-
-        for cell in cells:
-            cells[cell]._paths = []
-            cells[cell].fill._paths = []
-
-    num_instances = comm.bcast(num_instances, root=0)
-
-    return num_instances
+    openmc.reset_auto_ids()

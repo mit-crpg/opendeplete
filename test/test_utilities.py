@@ -18,13 +18,13 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
-        x, y = utilities.evaluate_single_nuclide(res, "10000", "Xe135")
+        x, y = utilities.evaluate_single_nuclide(res, "1", "Xe135")
 
         x_ref = [0.0, 1296000.0, 2592000.0, 3888000.0]
-        y_ref = [6.6747328233649218e+08, 3.5519259015137175e+14,
-                 3.5677583314840250e+14, 3.3822315389988969e+14]
+        y_ref = [6.6747328233649218e+08, 3.5519326338509556e+14,
+                 3.5965291907016744e+14, 3.3660528631036400e+14]
 
         np.testing.assert_array_equal(x, x_ref)
         np.testing.assert_array_equal(y, y_ref)
@@ -34,15 +34,15 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
-        x, y = utilities.evaluate_reaction_rate(res, "10000", "Xe135", "(n,gamma)")
+        x, y = utilities.evaluate_reaction_rate(res, "1", "Xe135", "(n,gamma)")
 
         x_ref = [0.0, 1296000.0, 2592000.0, 3888000.0]
-        xe_ref = np.array([6.6747328233649218e+08, 3.5519259015137175e+14,
-                           3.5677583314840250e+14, 3.3822315389988969e+14])
-        r_ref = np.array([4.0643479973455909e-05, 3.9300637358953226e-05,
-                          4.0927995824013084e-05, 4.2909741038149828e-05])
+        xe_ref = np.array([6.6747328233649218e+08, 3.5519326338509556e+14,
+                           3.5965291907016744e+14, 3.3660528631036400e+14])
+        r_ref = np.array([4.0643678160858948e-05, 3.7482633215418289e-05,
+                          3.6235405850442806e-05, 3.7149949868282194e-05])
 
         np.testing.assert_array_equal(x, x_ref)
         np.testing.assert_array_equal(y, xe_ref * r_ref)
@@ -53,12 +53,12 @@ class TestUtilities(unittest.TestCase):
         """
 
         # Load the reference
-        res = results.read_results("test/test_reference")
+        res = results.read_results("test/test_reference.h5")
 
         x, y = utilities.evaluate_eigenvalue(res)
 
         x_ref = [0.0, 1296000.0, 2592000.0, 3888000.0]
-        y_ref = [1.192198835792166, 1.1637094014049858, 1.1809904752233054, 1.2209960015790184]
+        y_ref = [1.1921984510699268, 1.1809789004827738, 1.1930669366462165, 1.2102186170751308]
 
 
         np.testing.assert_array_equal(x, x_ref)

@@ -65,10 +65,10 @@ class TestFull(unittest.TestCase):
         opendeplete.integrator.predictor(op)
 
         # Load the files
-        res_test = results.read_results(settings.output_dir + "/results")
+        res_test = results.read_results(settings.output_dir + "/results.h5")
 
         # Load the reference
-        res_old = results.read_results("test/test_reference")
+        res_old = results.read_results("test/test_reference.h5")
 
         # Assert same mats
         for mat in res_old[0].mat_to_ind:

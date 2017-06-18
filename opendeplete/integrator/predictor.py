@@ -1,14 +1,4 @@
-""" The Predictor algorithm.
-
-Implements the Predictor algorithm.
-
-This algorithm is mathematically defined as:
-
-.. math:
-    y' = A(y, t) y(t)
-    A_p = A(y_n, t_n)
-    y_{n+1} = expm(A_p h) y_n
-"""
+""" The Predictor algorithm."""
 
 import copy
 import os
@@ -20,7 +10,17 @@ from .cram import CRAM48
 from .save_results import save_results
 
 def predictor(operator, print_out=True):
-    """ Performs integration of an operator using basic Predictor method.
+    """The basic predictor integrator.
+
+    Implements the first order predictor algorithm. This algorithm is
+    mathematically defined as:
+
+    .. math::
+        y' &= A(y, t) y(t)
+
+        A_p &= A(y_n, t_n)
+
+        y_{n+1} &= \\text{expm}(A_p h) y_n
 
     Parameters
     ----------
@@ -46,7 +46,7 @@ def predictor(operator, print_out=True):
 
     for i, dt in enumerate(operator.settings.dt_vec):
         # Create vectors
-        x = [copy.copy(vec)]
+        x = [copy.deepcopy(vec)]
         seeds = []
         eigvls = []
         rates_array = []
@@ -78,7 +78,7 @@ def predictor(operator, print_out=True):
         vec = copy.deepcopy(x_result)
 
     # Perform one last simulation
-    x = [copy.copy(vec)]
+    x = [copy.deepcopy(vec)]
     seeds = []
     eigvls = []
     rates_array = []
