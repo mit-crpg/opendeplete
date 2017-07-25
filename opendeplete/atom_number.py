@@ -195,12 +195,12 @@ class AtomNumber(object):
 
     @property
     def n_mat(self):
-        """Number of cells."""
+        """Number of materials."""
         return len(self.mat_to_ind)
 
     @property
     def n_nuc(self):
-        """Number of nucs."""
+        """Number of nuclides."""
         return len(self.nuc_to_ind)
 
     @property
@@ -209,15 +209,13 @@ class AtomNumber(object):
         A list of all nuclide material names. Used for sorting the simulation.
         """
 
-        if self._burn_nuc_list is not None:
-            return self._burn_nuc_list
+        if self._burn_nuc_list is None:
+            self._burn_nuc_list = [None] * self.n_nuc_burn
 
-        self._burn_nuc_list = [None] * self.n_nuc_burn
-
-        for nuc in self.nuc_to_ind:
-            ind = self.nuc_to_ind[nuc]
-            if ind < self.n_nuc_burn:
-                self._burn_nuc_list[ind] = nuc
+            for nuc in self.nuc_to_ind:
+                ind = self.nuc_to_ind[nuc]
+                if ind < self.n_nuc_burn:
+                    self._burn_nuc_list[ind] = nuc
 
         return self._burn_nuc_list
 
@@ -227,14 +225,12 @@ class AtomNumber(object):
         A list of all burning material names. Used for sorting the simulation.
         """
 
-        if self._burn_mat_list is not None:
-            return self._burn_mat_list
+        if self._burn_mat_list is None:
+            self._burn_mat_list = [None] * self.n_mat_burn
 
-        self._burn_mat_list = [None] * self.n_mat_burn
-
-        for mat in self.mat_to_ind:
-            ind = self.mat_to_ind[mat]
-            if ind < self.n_mat_burn:
-                self._burn_mat_list[ind] = mat
+            for mat in self.mat_to_ind:
+                ind = self.mat_to_ind[mat]
+                if ind < self.n_mat_burn:
+                    self._burn_mat_list[ind] = mat
 
         return self._burn_mat_list

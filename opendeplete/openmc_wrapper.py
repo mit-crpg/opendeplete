@@ -712,8 +712,7 @@ class OpenMCOperator(Operator):
         if self.rank == 0:
             for i in range(1, self.size):
                 nuc_newset = self.comm.recv(source=i, tag=i)
-                for nuc in nuc_newset:
-                    nuc_set.add(nuc)
+                nuc_set |= nuc_newset
 
             # Sort them in the same order as self.number
             nuc_list = []
@@ -807,14 +806,12 @@ class OpenMCOperator(Operator):
         k_combined = file["k_combined"][0]
 
         # Extract tally bins
-        materials_int = file["tallies/filters/filter 1/bins"].value
-        materials = [str(mat) for mat in materials_int]
+        materials = list(self.mat_tally_ind.keys())
 
         nuclides_binary = file["tallies/tally 1/nuclides"].value
         nuclides = [nuc.decode('utf8') for nuc in nuclides_binary]
 
-        reactions_binary = file["tallies/tally 1/score_bins"].value
-        reactions = [react.decode('utf8') for react in reactions_binary]
+        reactions = list(self.chain.react_to_ind.keys())
 
         # Form fast map
         nuc_ind = [self.reaction_rates.nuc_to_ind[nuc] for nuc in nuclides]
@@ -895,10 +892,10 @@ class OpenMCOperator(Operator):
             tree = ET.parse(filename)
         except:
             if filename is None:
-                print("No cross_sections.xml specified in materials.")
+                msg = "No cross_sections.xml specified in materials."
             else:
-                print('Cross section file "', filename, '" is invalid.')
-            raise
+                msg = 'Cross section file "{}" is invalid.'.format(filename)
+            raise IOError(msg)
 
         root = tree.getroot()
         self.burn_nuc_to_ind = OrderedDict()
