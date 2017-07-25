@@ -21,12 +21,23 @@ import h5py
 from mpi4py import MPI
 import numpy as np
 import openmc
-from openmc.stats import Box
 
 from .atom_number import AtomNumber
 from .depletion_chain import DepletionChain
 from .reaction_rates import ReactionRates
 from .function import Settings, Operator
+
+
+def chunks(items, n):
+    min_size, extra = divmod(len(items), n)
+    j = 0
+    chunk_list = []
+    for i in range(n):
+        chunk_size = min_size + int(i < extra)
+        chunk_list.append(items[j:j + chunk_size])
+        j += chunk_size
+    return chunk_list
+
 
 class OpenMCSettings(Settings):
     """ The OpenMCSettings class.
@@ -175,7 +186,7 @@ class OpenMCOperator(Operator):
     """
 
     def __init__(self, geometry, settings):
-        Operator.__init__(self, settings)
+        super().__init__(settings)
 
         self.comm = MPI.COMM_WORLD
 
@@ -289,8 +300,7 @@ class OpenMCOperator(Operator):
 
         # Iterate once through the geometry to get dictionaries
         cells = self.geometry.get_all_material_cells()
-        for cell_id in cells:
-            cell = cells[cell_id]
+        for cell in cells.values():
             name = cell.name
 
             if isinstance(cell.fill, openmc.Material):
@@ -324,13 +334,9 @@ class OpenMCOperator(Operator):
             exit("Need volumes for materials: " + str(need_vol))
 
         # Sort the sets
-        mat_burn_int = sorted([int(mat) for mat in mat_burn])
-        mat_burn = [str(mat) for mat in mat_burn_int]
-
-        mat_not_burn_int = sorted([int(mat) for mat in mat_not_burn])
-        mat_not_burn = [str(mat) for mat in mat_not_burn_int]
-
-        nuc_set = sorted(list(nuc_set))
+        mat_burn = sorted(mat_burn, key=int)
+        mat_not_burn = sorted(mat_not_burn, key=int)
+        nuc_set = sorted(nuc_set)
 
         # Construct a global nuclide dictionary, burned first
         nuc_dict = copy.deepcopy(self.chain.nuclide_dict)
@@ -343,30 +349,8 @@ class OpenMCOperator(Operator):
                 i += 1
 
         # Decompose geometry
-        n = self.size
-        chunk, extra = divmod(len(mat_burn), n)
-        mat_burn_lists = []
-        j = 0
-        for i in range(n):
-            if i < extra:
-                c_chunk = chunk + 1
-            else:
-                c_chunk = chunk
-            mat_burn_chunk = mat_burn[j:j + c_chunk]
-            j += c_chunk
-            mat_burn_lists.append(mat_burn_chunk)
-
-        chunk, extra = divmod(len(mat_not_burn), n)
-        mat_not_burn_lists = []
-        j = 0
-        for i in range(n):
-            if i < extra:
-                c_chunk = chunk + 1
-            else:
-                c_chunk = chunk
-            mat_not_burn_chunk = mat_not_burn[j:j + c_chunk]
-            j += c_chunk
-            mat_not_burn_lists.append(mat_not_burn_chunk)
+        mat_burn_lists = chunks(mat_burn, self.size)
+        mat_not_burn_lists = chunks(mat_not_burn, self.size)
 
         mat_tally_ind = OrderedDict()
 
@@ -687,8 +671,8 @@ class OpenMCOperator(Operator):
             settings_file.batches = batches
             settings_file.inactive = inactive
             settings_file.particles = particles
-            settings_file.source = openmc.Source(space=Box(self.settings.lower_left,
-                                                           self.settings.upper_right))
+            settings_file.source = openmc.Source(space=openmc.stats.Box(
+                self.settings.lower_left, self.settings.upper_right))
 
             if self.settings.entropy_dimension is not None:
                 entropy_mesh = openmc.Mesh()
@@ -883,19 +867,8 @@ class OpenMCOperator(Operator):
 
             self.reaction_rates.rates[i, :, :] = results_expanded
 
-        # Communicate power between nodes
-        if self.rank == 0:
-            power_array = np.zeros(self.size)
-            power_array[0] = power
-
-            for i in range(1, self.size):
-                power_array[i] = self.comm.recv(source=i, tag=i)
-
-            power = np.sum(power_array)
-        else:
-            self.comm.send(power, dest=0, tag=self.rank)
-
-        power = self.comm.bcast(power, root=0)
+        # Reduce power from all processes
+        power = self.comm.allreduce(power)
 
         self.reaction_rates[:, :, :] *= (self.settings.power / power)
 
@@ -971,15 +944,9 @@ class OpenMCOperator(Operator):
         for i, mat in enumerate(burn_list):
             volume[mat] = self.number.volume[i]
 
-        if self.rank == 0:
-            for i in range(1, self.size):
-                volume_new = self.comm.recv(source=i, tag=i)
-                for mat, vol in volume_new.items():
-                    volume[mat] = vol
-        else:
-            self.comm.send(volume, dest=0, tag=self.rank)
-
-        volume = self.comm.bcast(volume, root=0)
+        # Combine volume dictionaries across processes
+        volume_list = self.comm.allgather(volume)
+        volume = {k: v for d in volume_list for k, v in d.items()}
 
         return volume, nuc_list, burn_list, self.mat_tally_ind
 
