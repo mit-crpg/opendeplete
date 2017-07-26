@@ -724,6 +724,13 @@ class OpenMCOperator(Operator):
         else:
             self.comm.send(nuc_set, dest=0, tag=self.rank)
 
+        # Store list of tally nuclides on each process
+        self.comm.bcast(nuc_list, root=0)
+        self._tally_nuclides = []
+        for nuc in nuc_list:
+            if nuc in self.chain.nuclide_dict:
+                self._tally_nuclides.append(nuc)
+
         if self.rank == 0:
             # Create tallies for depleting regions
             tally_ind = 1
@@ -734,9 +741,7 @@ class OpenMCOperator(Operator):
             # For each reaction in the chain, for each nuclide, and for each
             # cell, make a tally
             tally_dep = openmc.Tally(tally_id=tally_ind)
-            for key in nuc_list:
-                if key in self.chain.nuclide_dict:
-                    tally_dep.nuclides.append(key)
+            tally_dep.nuclides = self._tally_nuclides
 
             for reaction in self.chain.react_to_ind:
                 tally_dep.scores.append(reaction)
@@ -809,10 +814,7 @@ class OpenMCOperator(Operator):
 
         # Extract tally bins
         materials = list(self.mat_tally_ind.keys())
-
-        nuclides_binary = file["tallies/tally 1/nuclides"].value
-        nuclides = [nuc.decode('utf8') for nuc in nuclides_binary]
-
+        nuclides = self._tally_nuclides
         reactions = list(self.chain.react_to_ind.keys())
 
         # Form fast map
