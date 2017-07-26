@@ -610,7 +610,9 @@ class OpenMCOperator(Operator):
 
             for sab in self.materials[mat_id].sab:
                 sab_el = ET.SubElement(root, "sab")
-                sab_el.set("name", sab)
+                sab_el.set("name", sab[0])
+                if sab[1] != 1.0:
+                    sab_el.set("fraction", str(sab[1]))
 
             if _have_lxml:
                 fragment = ET.tostring(root, encoding="unicode", pretty_print="true")
