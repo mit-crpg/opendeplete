@@ -485,14 +485,14 @@ class OpenMCOperator(Operator):
 
         time_start = time.time()
 
-        openmc.lib.init(self.comm)
-        openmc.lib.run()
+        openmc.capi.init(self.comm)
+        openmc.capi.run()
 
         time_openmc = time.time()
 
         # Extract results
         k = self.unpack_tallies_and_normalize()
-        openmc.lib.finalize()
+        openmc.capi.finalize()
 
         if self.rank == 0:
             time_unpack = time.time()
@@ -778,7 +778,7 @@ class OpenMCOperator(Operator):
 
         self.reaction_rates[:, :, :] = 0.0
 
-        k_combined = openmc.lib.keff()[0]
+        k_combined = openmc.capi.keff()[0]
 
         # Extract tally bins
         materials = list(self.mat_tally_ind.keys())
@@ -812,7 +812,7 @@ class OpenMCOperator(Operator):
             slab = materials.index(mat)
 
             # Get material results hyperslab
-            arr = openmc.lib.tally_results(1)
+            arr = openmc.capi.tallies[1].results
             results = arr[slab, :, 1]
 
             results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
