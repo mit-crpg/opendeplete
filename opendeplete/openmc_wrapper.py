@@ -492,7 +492,7 @@ class OpenMCOperator(Operator):
         openmc.capi.tallies[1].nuclides = self._get_tally_nuclides()
 
         # Run OpenMC
-        openmc.capi.hard_reset()
+        openmc.capi.reset()
         openmc.capi.run()
 
         time_openmc = time.time()
