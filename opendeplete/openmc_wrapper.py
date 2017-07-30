@@ -86,7 +86,7 @@ class OpenMCSettings(Settings):
     """
 
     def __init__(self):
-        Settings.__init__(self)
+        super().__init__()
         # OpenMC specific
         try:
             self.chain_file = os.environ["OPENDEPLETE_CHAIN"]
@@ -275,6 +275,19 @@ class OpenMCOperator(Operator):
 
         # Create reaction rate tables
         self.initialize_reaction_rates()
+
+        # Create XML files
+        if self.rank == 0:
+            self.geometry.export_to_xml()
+        self.generate_settings_xml()
+        self.generate_materials_xml()
+        self.generate_tally_xml()
+
+        # Initialize OpenMC library
+        openmc.capi.init(self.comm)
+
+    def __del__(self):
+        openmc.capi.finalize()
 
     def extract_mat_ids(self):
         """ Extracts materials and assigns them to processes.
@@ -466,33 +479,26 @@ class OpenMCOperator(Operator):
         # Prevent OpenMC from complaining about re-creating tallies
         clean_up_openmc()
 
-        # Ensure the nonexistance of tallies.out, materials.xml
-        if self.rank == 0:
-            try:
-                os.remove("materials.xml")
-            except OSError:
-                pass
-
         self.comm.barrier()
 
         # Update status
         self.set_density(vec)
 
-        # Recreate model
-        self.generate_materials_xml()
-        self.generate_tally_xml()
-        self.generate_settings_xml()
 
         time_start = time.time()
 
-        openmc.capi.init(self.comm)
+        # Update material compositions and tally nuclides
+        self.update_materials()
+        openmc.capi.tallies[1].nuclides = self._get_tally_nuclides()
+
+        # Run OpenMC
+        openmc.capi.hard_reset()
         openmc.capi.run()
 
         time_openmc = time.time()
 
         # Extract results
         k = self.unpack_tallies_and_normalize()
-        openmc.capi.finalize()
 
         if self.rank == 0:
             time_unpack = time.time()
@@ -530,12 +536,41 @@ class OpenMCOperator(Operator):
             Total density for initial conditions.
         """
 
-        # Write geometry.xml
-        if self.rank == 0:
-            self.geometry.export_to_xml()
-
         # Return number density vector
         return self.total_density_list()
+
+    def update_materials(self):
+        number_list = self.comm.allgather(self.number)
+
+        for number_i in number_list:
+            for mat in number_i.mat_to_ind:
+                nuclides = []
+                densities = []
+                for nuc in self.number.nuc_to_ind:
+                    if nuc in self.participating_nuclides:
+                        val = 1.0e-24*self.number.get_atom_density(mat, nuc)
+
+                        # If nuclide is zero, do not add to the problem.
+                        if val > 0.0:
+                            if self.settings.round_number:
+                                val_magnitude = np.floor(np.log10(val))
+                                val_scaled = val / 10**val_magnitude
+                                val_round = round(val_scaled, 8)
+
+                                val = val_round * 10**val_magnitude
+
+                            nuclides.append(nuc)
+                            densities.append(val)
+                        else:
+                            # Only output warnings if values are significantly
+                            # negative.  CRAM does not guarantee positive values.
+                            if val < -1.0e-21:
+                                print("WARNING: nuclide ", nuc, " in material ", mat,
+                                      " is negative (density = ", val, " at/barn-cm)")
+                            number_i[mat, nuc] = 0.0
+
+                mat_view = openmc.capi.materials[int(mat)]
+                mat_view.set_densities(nuclides, densities)
 
     def generate_materials_xml(self):
         """ Creates materials.xml from self.number.
@@ -668,14 +703,7 @@ class OpenMCOperator(Operator):
 
             settings_file.export_to_xml()
 
-    def generate_tally_xml(self):
-        """ Generates tally.xml.
-
-        Using information from self.depletion_chain as well as the nuclides
-        currently in the problem, this function automatically generates a
-        tally.xml for the simulation.
-        """
-
+    def _get_tally_nuclides(self):
         nuc_set = set()
 
         # Create the set of all nuclides in the decay chain in cells marked for
@@ -701,10 +729,21 @@ class OpenMCOperator(Operator):
 
         # Store list of tally nuclides on each process
         self.comm.bcast(nuc_list, root=0)
-        self._tally_nuclides = []
+        tally_nuclides = []
         for nuc in nuc_list:
             if nuc in self.chain.nuclide_dict:
-                self._tally_nuclides.append(nuc)
+                tally_nuclides.append(nuc)
+
+        return tally_nuclides
+
+    def generate_tally_xml(self):
+        """ Generates tally.xml.
+
+        Using information from self.depletion_chain as well as the nuclides
+        currently in the problem, this function automatically generates a
+        tally.xml for the simulation.
+        """
+        tally_nuclides = self._get_tally_nuclides()
 
         if self.rank == 0:
             # Create tallies for depleting regions
@@ -716,7 +755,7 @@ class OpenMCOperator(Operator):
             # For each reaction in the chain, for each nuclide, and for each
             # cell, make a tally
             tally_dep = openmc.Tally(tally_id=tally_ind)
-            tally_dep.nuclides = self._tally_nuclides
+            tally_dep.nuclides = tally_nuclides
 
             for reaction in self.chain.react_to_ind:
                 tally_dep.scores.append(reaction)
@@ -782,7 +821,7 @@ class OpenMCOperator(Operator):
 
         # Extract tally bins
         materials = list(self.mat_tally_ind.keys())
-        nuclides = self._tally_nuclides
+        nuclides = openmc.capi.tallies[1].nuclides
         reactions = list(self.chain.react_to_ind.keys())
 
         # Form fast map
