@@ -242,30 +242,21 @@ class OpenMCOperator(Operator):
         # Clear out OpenMC, create task lists, distribute
         if self.rank == 0:
             clean_up_openmc()
-            mat_burn_lists, \
-                mat_not_burn_lists, \
-                volume, \
-                self.mat_tally_ind, \
+            mat_burn_list, mat_not_burn_list, volume, self.mat_tally_ind, \
                 nuc_dict = self.extract_mat_ids()
-
-            mat_burn = mat_burn_lists[0]
-            mat_not_burn = mat_not_burn_lists[0]
-
-            # Send assignments to all
-            for i in range(1, self.size):
-                self.comm.send(mat_burn_lists[i], dest=i, tag=0)
-                self.comm.send(mat_not_burn_lists[i], dest=i, tag=1)
-                self.comm.send(nuc_dict, dest=i, tag=2)
         else:
-            # Receive assignments
-            mat_burn = self.comm.recv(source=0, tag=0)
-            mat_not_burn = self.comm.recv(source=0, tag=1)
-            nuc_dict = self.comm.recv(source=0, tag=2)
+            # Dummy variables
+            mat_burn_list = None
+            mat_not_burn_list = None
             volume = None
+            nuc_dict = None
             self.mat_tally_ind = None
 
-        volume = self.comm.bcast(volume, root=0)
-        self.mat_tally_ind = self.comm.bcast(self.mat_tally_ind, root=0)
+        mat_burn = self.comm.scatter(mat_burn_list)
+        mat_not_burn = self.comm.scatter(mat_not_burn_list)
+        nuc_dict = self.comm.bcast(nuc_dict)
+        volume = self.comm.bcast(volume)
+        self.mat_tally_ind = self.comm.bcast(self.mat_tally_ind)
 
         # Load participating nuclides
         self.load_participating()
@@ -474,7 +465,6 @@ class OpenMCOperator(Operator):
         # Update status
         self.set_density(vec)
 
-
         time_start = time.time()
 
         # Update material compositions and tally nuclides
@@ -529,8 +519,8 @@ class OpenMCOperator(Operator):
         # Create XML files
         if self.rank == 0:
             self.geometry.export_to_xml()
-        self.generate_settings_xml()
-        self.generate_materials_xml()
+            self.generate_settings_xml()
+            self.generate_materials_xml()
         self.generate_tally_xml()
 
         # Initialize OpenMC library
@@ -673,35 +663,34 @@ class OpenMCOperator(Operator):
             Rewrite to generalize source box.
         """
 
-        if self.rank == 0:
-            batches = self.settings.batches
-            inactive = self.settings.inactive
-            particles = self.settings.particles
+        batches = self.settings.batches
+        inactive = self.settings.inactive
+        particles = self.settings.particles
 
-            # Just a generic settings file to get it running.
-            settings_file = openmc.Settings()
-            settings_file.batches = batches
-            settings_file.inactive = inactive
-            settings_file.particles = particles
-            settings_file.source = openmc.Source(space=openmc.stats.Box(
-                self.settings.lower_left, self.settings.upper_right))
+        # Just a generic settings file to get it running.
+        settings_file = openmc.Settings()
+        settings_file.batches = batches
+        settings_file.inactive = inactive
+        settings_file.particles = particles
+        settings_file.source = openmc.Source(space=openmc.stats.Box(
+            self.settings.lower_left, self.settings.upper_right))
 
-            if self.settings.entropy_dimension is not None:
-                entropy_mesh = openmc.Mesh()
-                entropy_mesh.lower_left = self.settings.lower_left
-                entropy_mesh.upper_right = self.settings.upper_right
-                entropy_mesh.dimension = self.settings.entropy_dimension
-                settings_file.entropy_mesh = entropy_mesh
+        if self.settings.entropy_dimension is not None:
+            entropy_mesh = openmc.Mesh()
+            entropy_mesh.lower_left = self.settings.lower_left
+            entropy_mesh.upper_right = self.settings.upper_right
+            entropy_mesh.dimension = self.settings.entropy_dimension
+            settings_file.entropy_mesh = entropy_mesh
 
-            # Set seed
-            if self.settings.constant_seed is not None:
-                seed = self.settings.constant_seed
-            else:
-                seed = random.randint(1, sys.maxsize-1)
+        # Set seed
+        if self.settings.constant_seed is not None:
+            seed = self.settings.constant_seed
+        else:
+            seed = random.randint(1, sys.maxsize-1)
 
-            settings_file.seed = self.seed = seed
+        settings_file.seed = self.seed = seed
 
-            settings_file.export_to_xml()
+        settings_file.export_to_xml()
 
     def _get_tally_nuclides(self):
         nuc_set = set()
