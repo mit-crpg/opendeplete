@@ -276,16 +276,6 @@ class OpenMCOperator(Operator):
         # Create reaction rate tables
         self.initialize_reaction_rates()
 
-        # Create XML files
-        if self.rank == 0:
-            self.geometry.export_to_xml()
-        self.generate_settings_xml()
-        self.generate_materials_xml()
-        self.generate_tally_xml()
-
-        # Initialize OpenMC library
-        openmc.capi.init(self.comm)
-
     def __del__(self):
         openmc.capi.finalize()
 
@@ -535,6 +525,16 @@ class OpenMCOperator(Operator):
         list of numpy.array
             Total density for initial conditions.
         """
+
+        # Create XML files
+        if self.rank == 0:
+            self.geometry.export_to_xml()
+        self.generate_settings_xml()
+        self.generate_materials_xml()
+        self.generate_tally_xml()
+
+        # Initialize OpenMC library
+        openmc.capi.init(self.comm)
 
         # Return number density vector
         return self.total_density_list()
