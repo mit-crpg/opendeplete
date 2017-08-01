@@ -194,7 +194,6 @@ class OpenMCOperator(Operator):
         self.size = self.comm.size
 
         self.geometry = geometry
-        self.materials = []
         self.seed = 0
         self.number = None
         self.participating_nuclides = None
@@ -359,8 +358,6 @@ class OpenMCOperator(Operator):
             for nuc in self.burn_nuc_to_ind:
                 self.number.set_atom_density(np.s_[:], nuc, self.settings.dilute_initial)
 
-        self.materials = [None] * self.number.n_mat
-
         # Now extract the number densities and store
         cells = self.geometry.get_all_material_cells()
         for cell in cells.values():
@@ -383,10 +380,6 @@ class OpenMCOperator(Operator):
 
         mat_id = str(mat.id)
         mat_ind = self.number.mat_to_ind[mat_id]
-
-        self.materials[mat_ind] = Materials()
-        self.materials[mat_ind].sab = mat._sab
-        self.materials[mat_ind].temperature = mat.temperature
 
         nuc_dens = mat.get_nuclide_atom_densities()
         for nuclide in nuc_dens:
