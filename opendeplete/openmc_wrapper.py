@@ -190,40 +190,8 @@ class OpenMCOperator(Operator):
         super().__init__(settings)
 
         self.comm = MPI.COMM_WORLD
-
         self.rank = self.comm.rank
         self.size = self.comm.size
-
-        self.nodes = 0
-        self.npernode = 0
-
-        # Compute number of nodes and size of each node.
-        subcomm = self.comm.Split_type(MPI.COMM_TYPE_SHARED)
-        if self.rank == 0:
-            sub_rank = np.zeros(self.size, np.int32)
-            for i in range(1, self.size):
-                sub_rank[i] = self.comm.recv(source=i, tag=0)
-
-            # Compute the quantity of each rank
-            quantity = np.zeros(np.max(sub_rank) + 1, np.int32)
-            for i in range(self.size):
-                quantity[sub_rank[i]] += 1
-
-            # Starting from the bottom, compute the largest "block"
-            j = 1
-            for i in range(1, len(quantity)):
-                if quantity[i-1] != quantity[i]:
-                    break
-                else:
-                    j = i + 1
-            self.nodes = quantity[j-1]
-            self.npernode = j
-        else:
-            self.comm.send(subcomm.rank, dest=0, tag=0)
-
-        self.nodes = self.comm.bcast(self.nodes, root=0)
-        self.npernode = self.comm.bcast(self.npernode, root=0)
-        self.comm.barrier()
 
         self.geometry = geometry
         self.materials = []
@@ -567,90 +535,18 @@ class OpenMCOperator(Operator):
 
         Due to uncertainty with how MPI interacts with OpenMC API, this
         constructs the XML manually.  The long term goal is to do this
-        either through PHDF5 or direct memory writing.
+        through direct memory writing.
         """
 
-        xml_strings = []
+        materials = openmc.Materials(self.geometry.get_all_materials()
+                                     .values())
 
-        for mat in self.number.mat_to_ind:
-            root = ET.Element("material")
-            root.set("id", mat)
+        # Sort nuclides according to order in AtomNumber object
+        nuclides = list(self.number.nuc_to_ind.keys())
+        for mat in materials:
+            mat._nuclides.sort(key=lambda x: nuclides.index(x[0]))
 
-            density = ET.SubElement(root, "density")
-            density.set("units", "sum")
-
-            temperature = ET.SubElement(root, "temperature")
-            mat_id = self.number.mat_to_ind[mat]
-            temperature.text = str(self.materials[mat_id].temperature)
-
-            for nuc in self.number.nuc_to_ind:
-                if nuc in self.participating_nuclides:
-                    val = 1.0e-24*self.number.get_atom_density(mat, nuc)
-
-                    # If nuclide is zero, do not add to the problem.
-                    if val > 0.0:
-                        if self.settings.round_number:
-                            val_magnitude = np.floor(np.log10(val))
-                            val_scaled = val / 10**val_magnitude
-                            val_round = round(val_scaled, 8)
-
-                            val = val_round * 10**val_magnitude
-
-                        nuc_element = ET.SubElement(root, "nuclide")
-                        nuc_element.set("ao", str(val))
-                        nuc_element.set("name", nuc)
-                    else:
-                        # Only output warnings if values are significantly
-                        # negative.  CRAM does not guarantee positive values.
-                        if val < -1.0e-21:
-                            print("WARNING: nuclide ", nuc, " in material ", mat,
-                                  " is negative (density = ", val, " at/barn-cm)")
-                        self.number[mat, nuc] = 0.0
-
-            for sab in self.materials[mat_id].sab:
-                sab_el = ET.SubElement(root, "sab")
-                sab_el.set("name", sab[0])
-                if sab[1] != 1.0:
-                    sab_el.set("fraction", str(sab[1]))
-
-            if _have_lxml:
-                fragment = ET.tostring(root, encoding="unicode", pretty_print="true")
-                xml_strings.append(fragment)
-            else:
-                clean_xml_indentation(root, spaces_per_level=2)
-                fragment = ET.tostring(root, encoding="unicode", pretty_print="true")
-                xml_strings.append(fragment)
-
-        xml_string = "".join(xml_strings)
-
-        # Append beginning, end text.
-        if self.rank == 0:
-            xml_string = "<?xml version='1.0' encoding='utf-8'?>\n<materials>\n" + xml_string
-        if self.rank == self.size:
-            xml_string += "\n</materials>"
-
-        xml_bytes = np.fromstring(xml_string, dtype=np.uint8)
-
-        # Use MPI-IO to write to disk.
-        # First, communicate to all nodes the length of their string.
-        str_len = np.zeros(self.size, np.int32)
-
-        str_my_len = np.zeros(1, np.int32)
-        str_my_len[0] = len(xml_string)
-        self.comm.Allgather([str_my_len, MPI.INT], [str_len, MPI.INT])
-
-        # Compute index start.
-        start_ind = np.sum(str_len[0:self.rank])
-
-        # Open/create file
-        handle = MPI.File.Open(self.comm, "materials.xml",
-                               MPI.MODE_WRONLY | MPI.MODE_CREATE)
-
-        handle.Seek(start_ind, MPI.SEEK_SET)
-        handle.Write(xml_bytes)
-        handle.Close()
-
-        self.comm.barrier()
+        materials.export_to_xml()
 
     def generate_settings_xml(self):
         """ Generates settings.xml.
