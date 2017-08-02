@@ -4,16 +4,12 @@ import shutil
 import unittest
 
 import numpy as np
-try:
-    from mpi4py import MPI
-    _have_mpi = True
-except ImportError:
-    _have_mpi = False
 
 import opendeplete
 from opendeplete import results
 from opendeplete import utilities
 import test.example_geometry as example_geometry
+
 
 class TestFull(unittest.TestCase):
     """ Full system test suite.
@@ -113,9 +109,8 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        if _have_mpi:
-            MPI.COMM_WORLD.barrier()
-        if not _have_mpi or MPI.COMM_WORLD.rank == 0:
+        opendeplete.comm.barrier()
+        if opendeplete.comm.rank == 0:
             shutil.rmtree("test_full", ignore_errors=True)
 
 

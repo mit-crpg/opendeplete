@@ -8,13 +8,8 @@ import copy
 
 import numpy as np
 import h5py
-try:
-    from mpi4py import MPI
-    _have_mpi = True
-except ImportError:
-    _have_mpi = False
 
-from .comm import DummyCommunicator
+from . import comm, have_mpi
 from .reaction_rates import ReactionRates
 
 RESULTS_VERSION = 2
@@ -24,8 +19,6 @@ class Results(object):
 
     Attributes
     ----------
-    comm : mpi4py.MPI.Intracomm
-        The communicator to work with.
     k : list of float
         Eigenvalue for each substep.
     seeds : list of int
@@ -55,10 +48,6 @@ class Results(object):
     """
 
     def __init__(self):
-        if _have_mpi:
-            self.comm = MPI.COMM_WORLD
-        else:
-            self.comm = DummyCommunicator()
         self.k = None
         self.seeds = None
         self.time = None
@@ -254,10 +243,10 @@ class Results(object):
         """
 
         if "/number" not in handle:
-            self.comm.barrier()
+            comm.barrier()
             self.create_hdf5(handle)
 
-        self.comm.barrier()
+        comm.barrier()
 
         # Grab handles
         number_dset = handle["/number"]
@@ -306,10 +295,10 @@ class Results(object):
         for i in range(n_stages):
             number_dset[index, i, low:high+1, :] = self.data[i, :, :]
             rxn_dset[index, i, low:high+1, :, :] = self.rates[i][:, :, :]
-            if self.comm.rank == 0:
+            if comm.rank == 0:
                 eigenvalues_dset[index, i] = self.k[i]
                 seeds_dset[index, i] = self.seeds[i]
-        if self.comm.rank == 0:
+        if comm.rank == 0:
             time_dset[index, :] = self.time
 
     def from_hdf5(self, handle, index):
@@ -417,8 +406,8 @@ def write_results(result, filename, index):
         What step is this?
     """
 
-    if _have_mpi:
-        kwargs = {'driver': 'mpio', 'comm': MPI.COMM_WORLD}
+    if have_mpi:
+        kwargs = {'driver': 'mpio', 'comm': comm}
     else:
         kwargs = {}
 

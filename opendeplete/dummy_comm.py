@@ -17,6 +17,9 @@ class DummyCommunicator(object):
     def gather(self, sendobj, root=0):
         return [sendobj]
 
+    def py2f(self):
+        return 0
+
     def reduce(self, sendobj, op=None, root=0):
         return sendobj
 

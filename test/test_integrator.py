@@ -5,10 +5,10 @@ import os
 import unittest
 from unittest.mock import MagicMock
 
-from mpi4py import MPI
 import numpy as np
 
-from opendeplete import integrator, ReactionRates, results
+from opendeplete import integrator, ReactionRates, results, comm
+
 
 class TestIntegrator(unittest.TestCase):
     """ Tests for integrator.py
@@ -24,7 +24,6 @@ class TestIntegrator(unittest.TestCase):
 
         stages = 3
 
-        comm = MPI.COMM_WORLD
         np.random.seed(comm.rank)
 
         # Mock geometry
@@ -108,8 +107,8 @@ class TestIntegrator(unittest.TestCase):
         np.testing.assert_array_equal(res[1].time, t2)
 
         # Delete files
-        MPI.COMM_WORLD.barrier()
-        if MPI.COMM_WORLD.rank == 0:
+        comm.barrier()
+        if comm.rank == 0:
             os.remove("results.h5")
 
 
