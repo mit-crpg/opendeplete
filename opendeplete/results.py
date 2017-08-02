@@ -8,8 +8,13 @@ import copy
 
 import numpy as np
 import h5py
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    _have_mpi = True
+except ImportError:
+    _have_mpi = False
 
+from .comm import DummyCommunicator
 from .reaction_rates import ReactionRates
 
 RESULTS_VERSION = 2
@@ -50,7 +55,10 @@ class Results(object):
     """
 
     def __init__(self):
-        self.comm = MPI.COMM_WORLD
+        if _have_mpi:
+            self.comm = MPI.COMM_WORLD
+        else:
+            self.comm = DummyCommunicator()
         self.k = None
         self.seeds = None
         self.time = None
@@ -395,6 +403,7 @@ def get_dict(number):
 
     return mat_to_ind, nuc_to_ind
 
+
 def write_results(result, filename, index):
     """ Outputs result to an .hdf5 file.
 
@@ -408,14 +417,15 @@ def write_results(result, filename, index):
         What step is this?
     """
 
-    if index == 0:
-        file = h5py.File(filename, "w", driver='mpio', comm=MPI.COMM_WORLD)
+    if _have_mpi:
+        kwargs = {'driver': 'mpio', 'comm': MPI.COMM_WORLD}
     else:
-        file = h5py.File(filename, "a", driver='mpio', comm=MPI.COMM_WORLD)
+        kwargs = {}
 
-    result.to_hdf5(file, index)
+    kwargs['mode'] = "w" if index == 0 else "a"
 
-    file.close()
+    with h5py.File(filename, **kwargs) as handle:
+        result.to_hdf5(handle, index)
 
 
 def read_results(filename):

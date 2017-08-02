@@ -4,7 +4,11 @@ import shutil
 import unittest
 
 import numpy as np
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    _have_mpi = True
+except ImportError:
+    _have_mpi = False
 
 import opendeplete
 from opendeplete import results
@@ -109,8 +113,9 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        MPI.COMM_WORLD.barrier()
-        if MPI.COMM_WORLD.rank == 0:
+        if _have_mpi:
+            MPI.COMM_WORLD.barrier()
+        if not _have_mpi or MPI.COMM_WORLD.rank == 0:
             shutil.rmtree("test_full", ignore_errors=True)
 
 

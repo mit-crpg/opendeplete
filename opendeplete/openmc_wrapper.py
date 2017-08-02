@@ -18,14 +18,19 @@ except ImportError:
     _have_lxml = False
 
 import h5py
-from mpi4py import MPI
 import numpy as np
 import openmc
+try:
+    from mpi4py import MPI
+    _have_mpi = True
+except ImportError:
+    _have_mpi = False
 
 from .atom_number import AtomNumber
 from .depletion_chain import DepletionChain
 from .reaction_rates import ReactionRates
 from .function import Settings, Operator
+from .comm import DummyCommunicator
 
 
 def chunks(items, n):
@@ -189,9 +194,10 @@ class OpenMCOperator(Operator):
     def __init__(self, geometry, settings):
         super().__init__(settings)
 
-        self.comm = MPI.COMM_WORLD
-        self.rank = self.comm.rank
-        self.size = self.comm.size
+        if _have_mpi:
+            self.comm = MPI.COMM_WORLD
+        else:
+            self.comm = DummyCommunicator()
 
         self.geometry = geometry
         self.seed = 0
@@ -207,7 +213,7 @@ class OpenMCOperator(Operator):
         self.chain = DepletionChain.xml_read(settings.chain_file)
 
         # Clear out OpenMC, create task lists, distribute
-        if self.rank == 0:
+        if self.comm.rank == 0:
             clean_up_openmc()
             mat_burn_list, mat_not_burn_list, volume, self.mat_tally_ind, \
                 nuc_dict = self.extract_mat_ids()
@@ -311,8 +317,8 @@ class OpenMCOperator(Operator):
                 i += 1
 
         # Decompose geometry
-        mat_burn_lists = chunks(mat_burn, self.size)
-        mat_not_burn_lists = chunks(mat_not_burn, self.size)
+        mat_burn_lists = chunks(mat_burn, self.comm.size)
+        mat_not_burn_lists = chunks(mat_not_burn, self.comm.size)
 
         mat_tally_ind = OrderedDict()
 
@@ -421,8 +427,6 @@ class OpenMCOperator(Operator):
         # Prevent OpenMC from complaining about re-creating tallies
         clean_up_openmc()
 
-        self.comm.barrier()
-
         # Update status
         self.set_density(vec)
 
@@ -441,7 +445,7 @@ class OpenMCOperator(Operator):
         # Extract results
         k = self.unpack_tallies_and_normalize()
 
-        if self.rank == 0:
+        if self.comm.rank == 0:
             time_unpack = time.time()
 
             if print_out:
@@ -478,14 +482,17 @@ class OpenMCOperator(Operator):
         """
 
         # Create XML files
-        if self.rank == 0:
+        if self.comm.rank == 0:
             self.geometry.export_to_xml()
             self.generate_settings_xml()
             self.generate_materials_xml()
         self.generate_tally_xml()
 
         # Initialize OpenMC library
-        openmc.capi.init(self.comm)
+        if _have_mpi:
+            openmc.capi.init(self.comm)
+        else:
+            openmc.capi.init()
 
         # Return number density vector
         return self.total_density_list()
@@ -592,18 +599,21 @@ class OpenMCOperator(Operator):
                     nuc_set.add(nuc)
 
         # Communicate which nuclides have nonzeros to rank 0
-        if self.rank == 0:
-            for i in range(1, self.size):
+        if self.comm.rank == 0:
+            for i in range(1, self.comm.size):
                 nuc_newset = self.comm.recv(source=i, tag=i)
                 nuc_set |= nuc_newset
 
-            # Sort them in the same order as self.number
+        else:
+            self.comm.send(nuc_set, dest=0, tag=self.comm.rank)
+
+        if self.comm.rank == 0:
+            # Sort nuclides in the same order as self.number
             nuc_list = []
             for nuc in self.number.nuc_to_ind:
                 if nuc in nuc_set:
                     nuc_list.append(nuc)
-        else:
-            self.comm.send(nuc_set, dest=0, tag=self.rank)
+
 
         # Store list of tally nuclides on each process
         self.comm.bcast(nuc_list, root=0)
@@ -623,7 +633,7 @@ class OpenMCOperator(Operator):
         """
         tally_nuclides = self._get_tally_nuclides()
 
-        if self.rank == 0:
+        if self.comm.rank == 0:
             # Create tallies for depleting regions
             tally_ind = 1
             mat_filter_dep = openmc.MaterialFilter(

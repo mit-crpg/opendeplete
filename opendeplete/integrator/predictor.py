@@ -6,7 +6,11 @@ import os
 from multiprocessing import Pool
 import time
 
-from mpi4py import MPI
+try:
+    from mpi4py import MPI
+    _have_mpi = True
+except ImportError:
+    _have_mpi = False
 
 from .cram import CRAM48, cram_wrapper
 from .save_results import save_results
@@ -75,7 +79,7 @@ def predictor(operator, print_out=True):
             x_result = list(pool.map(cram_wrapper, iters))
 
         t_end = time.time()
-        if MPI.COMM_WORLD.rank == 0:
+        if not _have_mpi or MPI.COMM_WORLD.rank == 0:
             if print_out:
                 print("Time to matexp: ", t_end - t_start)
 
