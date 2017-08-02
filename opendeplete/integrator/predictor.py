@@ -1,13 +1,16 @@
 """ The Predictor algorithm."""
 
 import copy
+from itertools import repeat
 import os
+from multiprocessing import Pool
 import time
 
 from mpi4py import MPI
 
-from .cram import CRAM48
+from .cram import CRAM48, cram_wrapper
 from .save_results import save_results
+
 
 def predictor(operator, print_out=True):
     """The basic predictor integrator.
@@ -60,14 +63,16 @@ def predictor(operator, print_out=True):
         # Create results, write to disk
         save_results(operator, x, rates_array, eigvls, seeds, [t, t + dt], i)
 
-        x_result = []
-
         t_start = time.time()
 
-        for mat in range(n_mats):
-            f = operator.form_matrix(rates_array[0], mat)
+        chains = repeat(operator.chain, n_mats)
+        vecs = (x[0][i] for i in range(n_mats))
+        rates = (rates_array[0][i, :, :].copy() for i in range(n_mats))
+        dts = repeat(dt, n_mats)
 
-            x_result.append(CRAM48(f, x[0][mat], dt))
+        with Pool() as pool:
+            iters = zip(chains, vecs, rates, dts)
+            x_result = list(pool.map(cram_wrapper, iters))
 
         t_end = time.time()
         if MPI.COMM_WORLD.rank == 0:

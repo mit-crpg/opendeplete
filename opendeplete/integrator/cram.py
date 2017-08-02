@@ -7,6 +7,13 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
+
+def cram_wrapper(args):
+    chain, x0, rates, dt = args
+    A = chain.form_matrix(rates)
+    return CRAM48(A, x0, dt)
+
+
 def CRAM16(A, n0, dt):
     """ Chebyshev Rational Approximation Method, order 16
 
