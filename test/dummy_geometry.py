@@ -26,6 +26,10 @@ class DummyGeometry(Operator):
     def __init__(self, settings):
         Operator.__init__(self, settings)
 
+    @property
+    def chain(self):
+        return self
+
     def eval(self, vec, print_out=False):
         """ Evaluates F(y)
 
@@ -59,7 +63,7 @@ class DummyGeometry(Operator):
 
         return 0.0, reaction_rates, 0
 
-    def form_matrix(self, y, mat):
+    def form_matrix(self, rates):
         """ Forms the f(y) matrix in y' = f(y)y.
 
         Nominally a depletion matrix, this is abstracted on the off chance
@@ -67,10 +71,8 @@ class DummyGeometry(Operator):
 
         Parameters
         ----------
-        y : numpy.ndarray
-            An array representing y.
-        mat : int
-            Material id.
+        rates : numpy.ndarray
+            Slice of reaction rates for a single material
 
         Returns
         -------
@@ -78,8 +80,8 @@ class DummyGeometry(Operator):
             Sparse matrix representing f(y).
         """
 
-        y_1 = y[mat, 0, 0]
-        y_2 = y[mat, 1, 0]
+        y_1 = rates[0, 0]
+        y_2 = rates[1, 0]
 
         mat = np.zeros((2, 2))
         a11 = np.sin(y_2)
@@ -87,9 +89,7 @@ class DummyGeometry(Operator):
         a21 = -np.cos(y_2)
         a22 = np.sin(y_1)
 
-        mat = sp.csr_matrix(np.array([[a11, a12], [a21, a22]]))
-
-        return mat
+        return sp.csr_matrix(np.array([[a11, a12], [a21, a22]]))
 
     @property
     def volume(self):
@@ -98,9 +98,7 @@ class DummyGeometry(Operator):
             Volumes of material
         """
 
-        volume = {"1": 0.0}
-
-        return volume
+        return {"1": 0.0}
 
     @property
     def nuc_list(self):

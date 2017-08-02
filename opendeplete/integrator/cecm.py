@@ -72,12 +72,12 @@ def cecm(operator, print_out=True):
 
         chains = repeat(operator.chain, n_mats)
         vecs = (x[0][i] for i in range(n_mats))
-        rates = (rates_array[0][i, ...].copy() for i in range(n_mats))
+        rates = (rates_array[0][i, :, :].copy() for i in range(n_mats))
         dts = repeat(dt/2, n_mats)
 
         with Pool() as pool:
             iters = zip(chains, vecs, rates, dts)
-            x_result = list(executor.map(cram_wrapper, args))
+            x_result = list(pool.map(cram_wrapper, iters))
 
         t_end = time.time()
         if comm.rank == 0:
@@ -92,16 +92,16 @@ def cecm(operator, print_out=True):
         seeds.append(seed)
         rates_array.append(rates)
 
-        x_result = []
-
         t_start = time.time()
-        for mat in range(n_mats):
-            # Form matrix
-            f = operator.form_matrix(rates_array[1], mat)
 
-            x_new = CRAM48(f, x[0][mat], dt)
+        chains = repeat(operator.chain, n_mats)
+        vecs = (x[0][i] for i in range(n_mats))
+        rates = (rates_array[1][i, :, :] for i in range(n_mats))
+        dts = repeat(dt, n_mats)
 
-            x_result.append(x_new)
+        with Pool() as pool:
+            iters = zip(chains, vecs, rates, dts)
+            x_result = list(pool.map(cram_wrapper, iters))
 
         t_end = time.time()
         if comm.rank == 0:
