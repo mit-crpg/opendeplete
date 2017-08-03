@@ -20,6 +20,7 @@ except ImportError:
 import h5py
 import numpy as np
 import openmc
+import openmc.capi
 
 from . import comm
 from .atom_number import AtomNumber
