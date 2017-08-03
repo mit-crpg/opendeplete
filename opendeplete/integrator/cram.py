@@ -9,6 +9,19 @@ import scipy.sparse.linalg as sla
 
 
 def cram_wrapper(args):
+    """Wraps depletion matrix creation / CRAM solve for multiprocess execution
+
+    Parameters
+    ----------
+    args : tuple
+        The tuple should contain a depletion chain, the initial densities,
+        reaction rates, and a timestep.
+
+    Returns
+    -------
+    numpy.array
+        Results of the matrix exponent.
+    """
     chain, x0, rates, dt = args
     A = chain.form_matrix(rates)
     return CRAM48(A, x0, dt)

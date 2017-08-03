@@ -408,7 +408,7 @@ class OpenMCOperator(Operator):
         time_start = time.time()
 
         # Update material compositions and tally nuclides
-        self.update_materials()
+        self._update_materials()
         openmc.capi.tallies[1].nuclides = self._get_tally_nuclides()
 
         # Run OpenMC
@@ -469,7 +469,9 @@ class OpenMCOperator(Operator):
         # Return number density vector
         return self.total_density_list()
 
-    def update_materials(self):
+    def _update_materials(self):
+        """Updates material compositions in OpenMC on all processes."""
+
         number_list = comm.allgather(self.number)
 
         for number_i in number_list:
