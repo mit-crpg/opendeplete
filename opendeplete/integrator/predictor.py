@@ -71,7 +71,7 @@ def predictor(operator, print_out=True):
 
         with Pool() as pool:
             iters = zip(chains, vecs, rates, dts)
-            x_result = list(pool.map(cram_wrapper, iters))
+            x_result = list(pool.starmap(cram_wrapper, iters))
 
         t_end = time.time()
         if comm.rank == 0:

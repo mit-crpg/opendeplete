@@ -8,23 +8,27 @@ import scipy.sparse as sp
 import scipy.sparse.linalg as sla
 
 
-def cram_wrapper(args):
+def cram_wrapper(chain, n0, rates, dt):
     """Wraps depletion matrix creation / CRAM solve for multiprocess execution
 
     Parameters
     ----------
-    args : tuple
-        The tuple should contain a depletion chain, the initial densities,
-        reaction rates, and a timestep.
+    chain : DepletionChain
+        Depletion chain used to construct the burnup matrix
+    n0 : numpy.array
+        Vector to operate a matrix exponent on.
+    rates : numpy.ndarray
+        2D array indexed by nuclide then by cell.
+    dt : float
+        Time to integrate to.
 
     Returns
     -------
     numpy.array
         Results of the matrix exponent.
     """
-    chain, x0, rates, dt = args
     A = chain.form_matrix(rates)
-    return CRAM48(A, x0, dt)
+    return CRAM48(A, n0, dt)
 
 
 def CRAM16(A, n0, dt):
