@@ -461,10 +461,12 @@ class OpenMCOperator(Operator):
             self.geometry.export_to_xml()
             self.generate_settings_xml()
             self.generate_materials_xml()
-        self.generate_tally_xml()
 
         # Initialize OpenMC library
         openmc.capi.init(comm)
+
+        # Generate tallies in memory
+        self.generate_tallies()
 
         # Return number density vector
         return self.total_density_list()
@@ -598,34 +600,28 @@ class OpenMCOperator(Operator):
 
         return tally_nuclides
 
-    def generate_tally_xml(self):
-        """ Generates tally.xml.
+    def generate_tallies(self):
+        """Generates depletion tallies.
 
         Using information from self.depletion_chain as well as the nuclides
         currently in the problem, this function automatically generates a
         tally.xml for the simulation.
         """
-        tally_nuclides = self._get_tally_nuclides()
 
-        if comm.rank == 0:
-            # Create tallies for depleting regions
-            tally_ind = 1
-            mat_filter_dep = openmc.MaterialFilter(
-                [int(i) for i in self.mat_tally_ind], filter_id=1)
-            tallies_file = openmc.Tallies()
+        # Create tallies for depleting regions
+        materials = [openmc.capi.materials[int(i)]
+                     for i in self.mat_tally_ind]
+        mat_filter = openmc.capi.MaterialFilterView.new(materials)
+        mat_filter.id = 1
 
-            # For each reaction in the chain, for each nuclide, and for each
-            # cell, make a tally
-            tally_dep = openmc.Tally(tally_id=tally_ind)
-            tally_dep.nuclides = tally_nuclides
+        # For each reaction in the chain, for each nuclide, and for each
+        # cell, make a tally
+        tally_dep = openmc.capi.TallyView.new()
+        tally_dep.id = 1
+        tally_dep.nuclides = self._get_tally_nuclides()
 
-            for reaction in self.chain.react_to_ind:
-                tally_dep.scores.append(reaction)
-
-            tallies_file.append(tally_dep)
-
-            tally_dep.filters.append(mat_filter_dep)
-            tallies_file.export_to_xml()
+        tally_dep.scores = self.chain.react_to_ind.keys()
+        tally_dep.filters = [mat_filter]
 
     def total_density_list(self):
         """ Returns a list of total density lists.
