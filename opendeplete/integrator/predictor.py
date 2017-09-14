@@ -66,7 +66,7 @@ def predictor(operator, print_out=True):
 
         chains = repeat(operator.chain, n_mats)
         vecs = (x[0][i] for i in range(n_mats))
-        rates = (rates_array[0][i, :, :].copy() for i in range(n_mats))
+        rates = (rates_array[0][i, :, :] for i in range(n_mats))
         dts = repeat(dt, n_mats)
 
         with Pool() as pool:

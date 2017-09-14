@@ -589,7 +589,8 @@ class OpenMCOperator(Operator):
             for nuc in self.number.nuc_to_ind:
                 if nuc in nuc_set:
                     nuc_list.append(nuc)
-
+        else:
+            nuc_list = None
 
         # Store list of tally nuclides on each process
         comm.bcast(nuc_list, root=0)
