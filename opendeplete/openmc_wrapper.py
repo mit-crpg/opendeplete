@@ -503,8 +503,8 @@ class OpenMCOperator(Operator):
                                       " is negative (density = ", val, " at/barn-cm)")
                             number_i[mat, nuc] = 0.0
 
-                mat_view = openmc.capi.materials[int(mat)]
-                mat_view.set_densities(nuclides, densities)
+                mat_internal = openmc.capi.materials[int(mat)]
+                mat_internal.set_densities(nuclides, densities)
 
     def generate_materials_xml(self):
         """ Creates materials.xml from self.number.
@@ -612,13 +612,11 @@ class OpenMCOperator(Operator):
         # Create tallies for depleting regions
         materials = [openmc.capi.materials[int(i)]
                      for i in self.mat_tally_ind]
-        mat_filter = openmc.capi.MaterialFilterView.new(materials)
-        mat_filter.id = 1
+        mat_filter = openmc.capi.MaterialFilter(materials, 1)
 
         # For each reaction in the chain, for each nuclide, and for each
         # cell, make a tally
-        tally_dep = openmc.capi.TallyView.new()
-        tally_dep.id = 1
+        tally_dep = openmc.capi.Tally(1)
         tally_dep.nuclides = self._get_tally_nuclides()
 
         tally_dep.scores = self.chain.react_to_ind.keys()
