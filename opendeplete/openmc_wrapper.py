@@ -463,6 +463,7 @@ class OpenMCOperator(Operator):
             self.generate_materials_xml()
 
         # Initialize OpenMC library
+        comm.barrier()
         openmc.capi.init(comm)
 
         # Generate tallies in memory
@@ -480,9 +481,9 @@ class OpenMCOperator(Operator):
             for mat in number_i.mat_to_ind:
                 nuclides = []
                 densities = []
-                for nuc in self.number.nuc_to_ind:
+                for nuc in number_i.nuc_to_ind:
                     if nuc in self.participating_nuclides:
-                        val = 1.0e-24*self.number.get_atom_density(mat, nuc)
+                        val = 1.0e-24 * number_i.get_atom_density(mat, nuc)
 
                         # If nuclide is zero, do not add to the problem.
                         if val > 0.0:
@@ -591,7 +592,7 @@ class OpenMCOperator(Operator):
             nuc_list = None
 
         # Store list of tally nuclides on each process
-        comm.bcast(nuc_list, root=0)
+        nuc_list = comm.bcast(nuc_list, root=0)
         tally_nuclides = [nuc for nuc in nuc_list
                           if nuc in self.chain.nuclide_dict]
 
