@@ -406,7 +406,7 @@ def write_results(result, filename, index):
         What step is this?
     """
 
-    if have_mpi:
+    if have_mpi and h5py.get_config().mpi:
         kwargs = {'driver': 'mpio', 'comm': comm}
     else:
         kwargs = {}
