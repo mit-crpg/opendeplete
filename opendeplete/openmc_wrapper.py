@@ -475,9 +475,9 @@ class OpenMCOperator(Operator):
     def _update_materials(self):
         """Updates material compositions in OpenMC on all processes."""
 
-        number_list = comm.allgather(self.number)
+        for rank in range(comm.size):
+            number_i = comm.bcast(self.number, root=rank)
 
-        for number_i in number_list:
             for mat in number_i.mat_to_ind:
                 nuclides = []
                 densities = []
