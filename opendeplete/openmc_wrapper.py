@@ -585,19 +585,15 @@ class OpenMCOperator(Operator):
 
         if comm.rank == 0:
             # Sort nuclides in the same order as self.number
-            nuc_list = []
-            for nuc in self.number.nuc_to_ind:
-                if nuc in nuc_set:
-                    nuc_list.append(nuc)
+            nuc_list = [nuc for nuc in self.number.nuc_to_ind
+                        if nuc in nuc_set]
         else:
             nuc_list = None
 
         # Store list of tally nuclides on each process
         comm.bcast(nuc_list, root=0)
-        tally_nuclides = []
-        for nuc in nuc_list:
-            if nuc in self.chain.nuclide_dict:
-                tally_nuclides.append(nuc)
+        tally_nuclides = [nuc for nuc in nuc_list
+                          if nuc in self.chain.nuclide_dict]
 
         return tally_nuclides
 
