@@ -616,11 +616,11 @@ class OpenMCOperator(Operator):
                      for i in self.mat_tally_ind]
         mat_filter = openmc.capi.MaterialFilter(materials, 1)
 
-        # For each reaction in the chain, for each nuclide, and for each
-        # cell, make a tally
+        # Set up a tally that has a material filter covering each depletable
+        # material and scores corresponding to all reactions that cause
+        # transmutation. The nuclides for the tally are set later when eval() is
+        # called.
         tally_dep = openmc.capi.Tally(1)
-        tally_dep.nuclides = self._get_tally_nuclides()
-
         tally_dep.scores = self.chain.react_to_ind.keys()
         tally_dep.filters = [mat_filter]
 
