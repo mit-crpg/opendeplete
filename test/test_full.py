@@ -55,7 +55,8 @@ class TestFull(unittest.TestCase):
         settings.round_number = True
         settings.constant_seed = 1
 
-        settings.power = 2.337e15*4  # MeV/second cm from CASMO
+        joule_per_mev = 1.6021766208e-13
+        settings.power = 2.337e15*4*joule_per_mev  # MeV/second cm from CASMO
         settings.dt_vec = dt
         settings.output_dir = "test_full"
 

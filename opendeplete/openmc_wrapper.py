@@ -29,6 +29,9 @@ from .reaction_rates import ReactionRates
 from .function import Settings, Operator
 
 
+_JOULE_PER_EV = 1.6021766208e-19
+
+
 def chunks(items, n):
     min_size, extra = divmod(len(items), n)
     j = 0
@@ -41,7 +44,7 @@ def chunks(items, n):
 
 
 class OpenMCSettings(Settings):
-    """ The OpenMCSettings class.
+    """The OpenMCSettings class.
 
     Extends Settings to provide information OpenMC needs to run.
 
@@ -80,7 +83,9 @@ class OpenMCSettings(Settings):
     constant_seed : int
         If present, all runs will be performed with this seed.
     power : float
-        Power of the reactor (currently in MeV/second-cm).
+        Power of the reactor in W. For a 2D problem, the power can be given in
+        W/cm as long as the "volume" assigned to a depletion material is
+        actually an area in cm^2.
     """
 
     def __init__(self):
@@ -669,7 +674,8 @@ class OpenMCOperator(Operator):
             Provide units for power
         """
 
-        self.reaction_rates[:, :, :] = 0.0
+        rates = self.reaction_rates
+        rates[:, :, :] = 0.0
 
         k_combined = openmc.capi.keff()[0]
 
@@ -679,24 +685,30 @@ class OpenMCOperator(Operator):
         reactions = list(self.chain.react_to_ind.keys())
 
         # Form fast map
-        nuc_ind = [self.reaction_rates.nuc_to_ind[nuc] for nuc in nuclides]
-        react_ind = [self.reaction_rates.react_to_ind[react] for react in reactions]
+        nuc_ind = [rates.nuc_to_ind[nuc] for nuc in nuclides]
+        react_ind = [rates.react_to_ind[react] for react in reactions]
 
         # Compute fission power
         # TODO : improve this calculation
 
-        power = 0.0
+        # Keep track of energy produced from all reactions in eV per source
+        # particle
+        energy = 0.0
 
-        power_vec = np.zeros(self.reaction_rates.n_nuc)
+        # Create arrays to store fission Q values, reaction rates, and nuclide
+        # numbers
+        fission_Q = np.zeros(rates.n_nuc)
+        rates_expanded = np.zeros((rates.n_nuc, rates.n_react))
+        number = np.zeros(rates.n_nuc)
 
-        fission_ind = self.reaction_rates.react_to_ind["fission"]
+        fission_ind = rates.react_to_ind["fission"]
 
         for nuclide in self.chain.nuclides:
-            if nuclide.name in self.reaction_rates.nuc_to_ind:
+            if nuclide.name in rates.nuc_to_ind:
                 for rx in nuclide.reactions:
                     if rx.type == 'fission':
-                        ind = self.reaction_rates.nuc_to_ind[nuclide.name]
-                        power_vec[ind] = rx.Q*1e-6
+                        ind = rates.nuc_to_ind[nuclide.name]
+                        fission_Q[ind] = rx.Q
                         break
 
         # Extract results
@@ -705,35 +717,39 @@ class OpenMCOperator(Operator):
             slab = materials.index(mat)
 
             # Get material results hyperslab
-            arr = openmc.capi.tallies[1].results
-            results = arr[slab, :, 1]
+            results = openmc.capi.tallies[1].results[slab, :, 1]
 
-            results_expanded = np.zeros((self.reaction_rates.n_nuc, self.reaction_rates.n_react))
-            number = np.zeros(self.reaction_rates.n_nuc)
+            # Zero out reaction rates and nuclide numbers
+            rates_expanded[:] = 0.0
+            number[:] = 0.0
 
             # Expand into our memory layout
             j = 0
             for nuc, i_nuc_results in zip(nuclides, nuc_ind):
                 number[i_nuc_results] = self.number[mat, nuc]
                 for react in react_ind:
-                    results_expanded[i_nuc_results, react] = results[j]
+                    rates_expanded[i_nuc_results, react] = results[j]
                     j += 1
 
-            # Add power
-            power += np.dot(results_expanded[:, fission_ind], power_vec)
+            # Accumulate energy from fission
+            energy += np.dot(rates_expanded[:, fission_ind], fission_Q)
 
             # Divide by total number and store
             for i_nuc_results in nuc_ind:
                 if number[i_nuc_results] != 0.0:
                     for react in react_ind:
-                        results_expanded[i_nuc_results, react] /= number[i_nuc_results]
+                        rates_expanded[i_nuc_results, react] /= number[i_nuc_results]
 
-            self.reaction_rates.rates[i, :, :] = results_expanded
+            rates.rates[i, :, :] = rates_expanded
 
-        # Reduce power from all processes
-        power = comm.allreduce(power)
+        # Reduce energy produced from all processes
+        energy = comm.allreduce(energy)
 
-        self.reaction_rates[:, :, :] *= (self.settings.power / power)
+        # Determine power in eV/s
+        power = self.settings.power / _JOULE_PER_EV
+
+        # Scale reaction rates to obtain units of reactions/sec
+        rates[:, :, :] *= power / energy
 
         return k_combined
 
