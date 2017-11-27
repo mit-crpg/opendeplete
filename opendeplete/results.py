@@ -8,8 +8,8 @@ import copy
 
 import numpy as np
 import h5py
-from mpi4py import MPI
 
+from . import comm, have_mpi
 from .reaction_rates import ReactionRates
 
 RESULTS_VERSION = 2
@@ -19,8 +19,6 @@ class Results(object):
 
     Attributes
     ----------
-    comm : mpi4py.MPI.Intracomm
-        The communicator to work with.
     k : list of float
         Eigenvalue for each substep.
     seeds : list of int
@@ -50,7 +48,6 @@ class Results(object):
     """
 
     def __init__(self):
-        self.comm = MPI.COMM_WORLD
         self.k = None
         self.seeds = None
         self.time = None
@@ -246,10 +243,10 @@ class Results(object):
         """
 
         if "/number" not in handle:
-            self.comm.barrier()
+            comm.barrier()
             self.create_hdf5(handle)
 
-        self.comm.barrier()
+        comm.barrier()
 
         # Grab handles
         number_dset = handle["/number"]
@@ -298,10 +295,10 @@ class Results(object):
         for i in range(n_stages):
             number_dset[index, i, low:high+1, :] = self.data[i, :, :]
             rxn_dset[index, i, low:high+1, :, :] = self.rates[i][:, :, :]
-            if self.comm.rank == 0:
+            if comm.rank == 0:
                 eigenvalues_dset[index, i] = self.k[i]
                 seeds_dset[index, i] = self.seeds[i]
-        if self.comm.rank == 0:
+        if comm.rank == 0:
             time_dset[index, :] = self.time
 
     def from_hdf5(self, handle, index):
@@ -395,6 +392,7 @@ def get_dict(number):
 
     return mat_to_ind, nuc_to_ind
 
+
 def write_results(result, filename, index):
     """ Outputs result to an .hdf5 file.
 
@@ -408,14 +406,15 @@ def write_results(result, filename, index):
         What step is this?
     """
 
-    if index == 0:
-        file = h5py.File(filename, "w", driver='mpio', comm=MPI.COMM_WORLD)
+    if have_mpi and h5py.get_config().mpi:
+        kwargs = {'driver': 'mpio', 'comm': comm}
     else:
-        file = h5py.File(filename, "a", driver='mpio', comm=MPI.COMM_WORLD)
+        kwargs = {}
 
-    result.to_hdf5(file, index)
+    kwargs['mode'] = "w" if index == 0 else "a"
 
-    file.close()
+    with h5py.File(filename, **kwargs) as handle:
+        result.to_hdf5(handle, index)
 
 
 def read_results(filename):

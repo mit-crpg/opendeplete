@@ -5,11 +5,9 @@ import os
 import unittest
 
 import numpy as np
-from mpi4py import MPI
 
-from opendeplete import depletion_chain
-from opendeplete import reaction_rates
-from opendeplete import nuclide
+from opendeplete import comm, depletion_chain, reaction_rates, nuclide
+
 
 class TestDepletionChain(unittest.TestCase):
     """ Tests for DepletionChain class."""
@@ -96,7 +94,7 @@ class TestDepletionChain(unittest.TestCase):
         """Test writing a depletion chain to XML."""
 
         # Prevent different MPI ranks from conflicting
-        filename = 'test%u.xml' % MPI.COMM_WORLD.rank
+        filename = 'test%u.xml' % comm.rank
 
         A = nuclide.Nuclide()
         A.name = "A"

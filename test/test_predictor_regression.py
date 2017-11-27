@@ -4,7 +4,6 @@ import os
 import unittest
 
 import numpy as np
-from mpi4py import MPI
 
 import opendeplete
 from opendeplete import results
@@ -59,8 +58,8 @@ class TestPredictorRegression(unittest.TestCase):
 
         os.chdir(cls.cwd)
 
-        MPI.COMM_WORLD.barrier()
-        if MPI.COMM_WORLD.rank == 0:
+        opendeplete.comm.barrier()
+        if opendeplete.comm.rank == 0:
             os.remove(os.path.join(cls.results, "results.h5"))
             os.rmdir(cls.results)
 

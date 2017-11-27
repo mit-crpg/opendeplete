@@ -1,13 +1,15 @@
 """ The CE/CM integrator."""
 
 import copy
+from itertools import repeat
 import os
+from multiprocessing import Pool
 import time
 
-from mpi4py import MPI
-
-from .cram import CRAM48
+from .. import comm
+from .cram import CRAM48, cram_wrapper
 from .save_results import save_results
+
 
 def cecm(operator, print_out=True):
     """The CE/CM integrator.
@@ -66,19 +68,19 @@ def cecm(operator, print_out=True):
         seeds.append(seed)
         rates_array.append(rates)
 
-        x_result = []
-
         t_start = time.time()
-        for mat in range(n_mats):
-            # Form matrix
-            f = operator.form_matrix(rates_array[0], mat)
 
-            x_new = CRAM48(f, x[0][mat], dt/2)
+        chains = repeat(operator.chain, n_mats)
+        vecs = (x[0][i] for i in range(n_mats))
+        rates = (rates_array[0][i, :, :] for i in range(n_mats))
+        dts = repeat(dt/2, n_mats)
 
-            x_result.append(x_new)
+        with Pool() as pool:
+            iters = zip(chains, vecs, rates, dts)
+            x_result = list(pool.starmap(cram_wrapper, iters))
 
         t_end = time.time()
-        if MPI.COMM_WORLD.rank == 0:
+        if comm.rank == 0:
             if print_out:
                 print("Time to matexp: ", t_end - t_start)
 
@@ -90,19 +92,19 @@ def cecm(operator, print_out=True):
         seeds.append(seed)
         rates_array.append(rates)
 
-        x_result = []
-
         t_start = time.time()
-        for mat in range(n_mats):
-            # Form matrix
-            f = operator.form_matrix(rates_array[1], mat)
 
-            x_new = CRAM48(f, x[0][mat], dt)
+        chains = repeat(operator.chain, n_mats)
+        vecs = (x[0][i] for i in range(n_mats))
+        rates = (rates_array[1][i, :, :] for i in range(n_mats))
+        dts = repeat(dt, n_mats)
 
-            x_result.append(x_new)
+        with Pool() as pool:
+            iters = zip(chains, vecs, rates, dts)
+            x_result = list(pool.starmap(cram_wrapper, iters))
 
         t_end = time.time()
-        if MPI.COMM_WORLD.rank == 0:
+        if comm.rank == 0:
             if print_out:
                 print("Time to matexp: ", t_end - t_start)
 

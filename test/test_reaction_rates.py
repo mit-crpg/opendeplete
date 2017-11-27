@@ -4,6 +4,7 @@ import unittest
 
 from opendeplete import reaction_rates
 
+
 class TestReactionRates(unittest.TestCase):
     """ Tests for the ReactionRates class. """
 

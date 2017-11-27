@@ -4,12 +4,12 @@ import shutil
 import unittest
 
 import numpy as np
-from mpi4py import MPI
 
 import opendeplete
 from opendeplete import results
 from opendeplete import utilities
 import test.example_geometry as example_geometry
+
 
 class TestFull(unittest.TestCase):
     """ Full system test suite.
@@ -55,7 +55,8 @@ class TestFull(unittest.TestCase):
         settings.round_number = True
         settings.constant_seed = 1
 
-        settings.power = 2.337e15*4  # MeV/second cm from CASMO
+        joule_per_mev = 1.6021766208e-13
+        settings.power = 2.337e15*4*joule_per_mev  # MeV/second cm from CASMO
         settings.dt_vec = dt
         settings.output_dir = "test_full"
 
@@ -109,8 +110,8 @@ class TestFull(unittest.TestCase):
 
     def tearDown(self):
         """ Clean up files"""
-        MPI.COMM_WORLD.barrier()
-        if MPI.COMM_WORLD.rank == 0:
+        opendeplete.comm.barrier()
+        if opendeplete.comm.rank == 0:
             shutil.rmtree("test_full", ignore_errors=True)
 
 

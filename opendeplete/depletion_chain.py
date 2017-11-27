@@ -453,7 +453,7 @@ class DepletionChain(object):
 
         # Use DOK matrix as intermediate representation, then convert to CSR and return
         matrix_dok = sp.dok_matrix((self.n_nuclides, self.n_nuclides))
-        matrix_dok.update(matrix)
+        dict.update(matrix_dok, matrix)
         return matrix_dok.tocsr()
 
     def nuc_by_ind(self, ind):
